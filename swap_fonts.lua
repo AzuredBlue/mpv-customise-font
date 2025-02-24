@@ -40,6 +40,16 @@ local state = {
                 border_size = 2.5,
                 shadow_color = "#000000",
                 shadow_offset = 1
+            },
+            {
+                name = "CR",
+                font = "Trebuchet MS",
+                bold = true,
+                blur = 0,
+                border_color = "#000000",
+                border_size = 3,
+                shadow_color = "#000000",
+                shadow_offset = 1.5
             }
         }
     }
