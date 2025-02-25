@@ -60,12 +60,31 @@ local state = {
 }
 
 local function get_config_path()
-    local home = os.getenv("HOME") or os.getenv("USERPROFILE")
-    if not home then return nil end
-    
-    return package.config:sub(1,1) == '\\' 
-        and utils.join_path(home, "AppData", "Roaming", "mpv", "script-opts")
-        or utils.join_path(home, ".config", "mpv")
+    if package.config:sub(1,1) == '\\' then
+        -- Windows
+        local appdata = os.getenv("APPDATA")
+        if appdata then
+            return utils.join_path(utils.join_path(appdata, "mpv"), "script-opts")
+        else
+            local home = os.getenv("USERPROFILE")
+            if home then
+                return utils.join_path(
+                    utils.join_path(
+                        utils.join_path(
+                            utils.join_path(home, "AppData"),
+                        "Roaming"),
+                    "mpv"),
+                "script-opts")
+            end
+        end
+    else
+        -- Unix-like systems
+        local home = os.getenv("HOME")
+        if home then
+            return utils.join_path(utils.join_path(home, ".config"), "mpv")
+        end
+    end
+    return nil
 end
 
 local function ensure_config_directory()
