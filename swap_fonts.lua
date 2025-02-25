@@ -16,8 +16,12 @@ local state = {
     ass_small_font = false,
     styles = {
         ass = {
-            "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=2,Shadow=0,Blur=7",
+            -- "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=2,Shadow=0,Blur=7",
+            -- "FontName=Gandhi Sans,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
+            -- ""
+            "FontName=Netflix Sans,Bold=1,Outline=2,Shadow=0,Blur=7",
             "FontName=Gandhi Sans,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
+            "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
             ""
         },
         non_ass = {
@@ -26,7 +30,7 @@ local state = {
                 font = "Netflix Sans", 
                 bold = true,
                 blur = 3,
-                border_color = "#000000",
+                -- border_color = "#000000",
                 border_size = 2,
                 shadow_color = "#000000",
                 shadow_offset = 0
@@ -36,7 +40,7 @@ local state = {
                 font = "Gandhi Sans",
                 bold = true,
                 blur = 0,
-                border_color = "#000000",
+                -- border_color = "#000000",
                 border_size = 2.5,
                 shadow_color = "#000000",
                 shadow_offset = 1
@@ -46,7 +50,7 @@ local state = {
                 font = "Trebuchet MS",
                 bold = true,
                 blur = 0,
-                border_color = "#000000",
+                -- border_color = "#000000",
                 border_size = 3,
                 shadow_color = "#000000",
                 shadow_offset = 1.5
@@ -131,7 +135,7 @@ local function apply_non_ass_style()
     mp.set_property_native("sub-bold", style.bold)
     mp.set_property_native("sub-font-size", state.font_size)
     mp.set_property_native("sub-blur", style.blur)
-    mp.set_property_native("sub-border-color", style.border_color)
+    -- mp.set_property_native("sub-border-color", style.border_color)
     mp.set_property_native("sub-border-size", style.border_size)
     mp.set_property_native("sub-shadow-color", style.shadow_color)
     mp.set_property_native("sub-shadow-offset", style.shadow_offset)
@@ -180,14 +184,14 @@ end
 
 local function show_feedback(message)
     mp.osd_message(message, OSD_DURATION)
-    msg.info(message)
+    -- msg.info(message)
 end
 
 local function print_script_info()
     local sub_data = mp.get_property("sub-ass-extradata", "")
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or 360
-    
+    print(sub_data)
     local video_path = mp.get_property("path", "N/A")
     local current_track = mp.get_property_native("current-tracks/sub", {})
     
