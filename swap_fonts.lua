@@ -16,10 +16,10 @@ local state = {
     ass_small_font = false,
     styles = {
         ass = {
-            -- "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=2,Shadow=0,Blur=7",
-            -- "FontName=Gandhi Sans,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
+            "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
+            -- "FontName=Gandhi Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
             -- ""
-            "FontName=Netflix Sans,Bold=1,Outline=2,Shadow=0,Blur=7",
+            -- "FontName=Netflix Sans,Bold=1,Outline=2,Shadow=0,Blur=7",
             "FontName=Gandhi Sans,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
             "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
             ""
@@ -30,7 +30,7 @@ local state = {
                 font = "Netflix Sans", 
                 bold = true,
                 blur = 3,
-                -- border_color = "#000000",
+                border_color = "#000000",
                 border_size = 2,
                 shadow_color = "#000000",
                 shadow_offset = 0
@@ -104,8 +104,10 @@ end
 
 local function get_playres_scale()
     local sub_data = mp.get_property("sub-ass-extradata", "")
+
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or DEFAULT_PLAYRESY
+
     local xRatio = playresx / DEFAULT_PLAYRESX
     local yRatio = playresy / DEFAULT_PLAYRESY
     if xRatio >= yRatio then
@@ -132,15 +134,103 @@ local function scale_ass_style(style)
     end)
 end
 
+local function get_default_font_and_styles(sub_data)
+    local in_styles_section = false
+    local default_font = nil
+    local styles = {}
+    local target_font = nil
+
+    for line in sub_data:gmatch("[^\r\n]+") do
+        if line:match("Styles%]$") then
+            in_styles_section = true
+        elseif in_styles_section then
+            if line:match("^Style:") then
+                local params = {}
+                for param in line:sub(7):gmatch("([^,]+)") do
+                    table.insert(params, param:match("^%s*(.-)%s*$"))
+                end
+                
+                if #params >= 2 then
+                    local style_name = params[1]
+                    local font_name = params[2]
+                    local lower_name = style_name:lower()  -- Case-insensitive check
+                    
+                    -- Skip styles containing "sign" or "song" in any part
+                    if lower_name:find("sign") or lower_name:find("song") then
+                        goto continue
+                    end
+                    
+                    -- Set target font from first style
+                    if not target_font then
+                        target_font = font_name
+                        default_font = style_name
+                    end
+                    
+                    -- Collect all styles using target font
+                    if font_name == target_font then
+                        table.insert(styles, style_name)
+                    end
+                end
+                ::continue::
+            end
+        end
+    end
+    
+    return default_font, styles
+end
+
+local function prefix_style_with_styles(style_names, scaled_style)
+    local all_parts = {}
+    
+    for _, style_name in ipairs(style_names) do
+        local parts = {}
+        for param in scaled_style:gmatch("([^,]+)") do
+            local key, value = param:match("^([^=]+)=(.+)$")
+            if key and value then
+                table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+            else
+                table.insert(parts, param)
+            end
+        end
+        table.insert(all_parts, table.concat(parts, ","))
+    end
+    
+    return table.concat(all_parts, ",")
+end
+
 local function apply_ass_style()
     local style = state.styles.ass[state.ass_index]
     if not style then return end
     
     local scaled_style = scale_ass_style(style)
+
     if state.ass_small_font then
         scaled_style = scaled_style .. string.format(",FontSize=%d", 
             math.floor(23 * get_playres_scale()))
     end
+
+    -- Try to only apply to the default font
+    local sub_data = mp.get_property("sub-ass-extradata", "")
+
+    local default_style_name, matching_styles = get_default_font_and_styles(sub_data)
+
+    if #matching_styles > 0 then
+        scaled_style = prefix_style_with_styles(matching_styles, scaled_style)
+    end
+
+    -- print("Scaled style is now: " .. scaled_style)
+    -- Fix LayoutRes
+    local layoutResY = tonumber(sub_data:match("LayoutResY:%s*(%d+)")) or ""
+    
+    if layoutResY == "" then
+        local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)"))
+        local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
+        if playresx ~= "" then
+            local layoutresString = string.format("LayoutResX=%s,LayoutResY=%s", playresx, playresy)
+            scaled_style =  layoutresString .. ',' .. scaled_style
+        end
+    end
+
     
     mp.set_property("sub-ass-style-overrides", scaled_style)
     mp.set_property("sub-pos", 98)
@@ -206,14 +296,62 @@ local function show_feedback(message)
     -- msg.info(message)
 end
 
+local function format_style_overrides(override_str)
+    local attr_order = {}  -- Maintain insertion order
+    local attrs = {}
+    local fonts = {}
+    local seen_styles = {}
+
+    -- First pass: collect attributes in order and track fonts
+    for param in override_str:gmatch("([^,]+)") do
+        local style, attr, value = param:match("([^.]+)%.([^=]+)=(.+)")
+        if attr then
+            -- Track attribute order (only first occurrence)
+            if not attrs[attr] then
+                table.insert(attr_order, attr)
+                attrs[attr] = {
+                    value = value,
+                    multiple = false
+                }
+            else
+                -- Mark as multiple if values differ
+                if attrs[attr].value ~= value then
+                    attrs[attr].multiple = true
+                end
+            end
+
+            -- Track font changes
+            if attr == "FontName" and not seen_styles[style] then
+                table.insert(fonts, style)
+                seen_styles[style] = true
+            end
+        end
+    end
+
+    -- Build output in original order
+    local parts = {}
+    for _, attr in ipairs(attr_order) do
+        local val = attrs[attr].multiple and "multiple" or attrs[attr].value
+        table.insert(parts, string.format('%s="%s"', attr, val))
+    end
+
+    -- Add font changes
+    if #fonts > 0 then
+        table.insert(parts, "\nFonts Changed: " .. table.concat(fonts, ", "))
+    end
+
+    return table.concat(parts, ", ")
+end
+
 local function print_script_info()
     local sub_data = mp.get_property("sub-ass-extradata", "")
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or 360
-    print(sub_data)
+
     local video_path = mp.get_property("path", "N/A")
     local current_track = mp.get_property_native("current-tracks/sub", {})
-    
+    local style_overrides = format_style_overrides(mp.get_property("sub-ass-style-overrides", "None"))
+
     local style_info = ""
     if is_ass_subtitle() then
         local current_style = state.styles.ass[state.ass_index] or "Default"
@@ -232,7 +370,7 @@ Style overrides: %s]],
             get_playres_scale(),
             playresx,
             playresy,
-            mp.get_property("sub-ass-style-overrides", "None")
+            style_overrides
         )
     else
         local current_style = state.styles.non_ass[state.non_ass_index] or {}
@@ -314,3 +452,25 @@ mp.add_key_binding("k", "cycle_styles_forward", function() cycle_styles(1) end)
 mp.add_key_binding("K", "cycle_styles_backward", function() cycle_styles(-1) end)
 mp.add_key_binding("Ctrl+k", "toggle_font_size", toggle_font_size)
 mp.add_key_binding("i", "print_script_info", print_script_info)
+
+local function print_fonts()
+    local sub_data = mp.get_property_native("sub-ass-extradata", "")
+    local in_styles_section = false
+
+    for line in sub_data:gmatch("[^\r\n]+") do
+        -- Enter styles section
+        if line:match("Styles%]$") then
+            in_styles_section = true
+        elseif in_styles_section then
+            -- Exit section if we hit a new section header
+            if line:match("^%[") then
+                in_styles_section = false
+            elseif line:match("^Style:") then
+                -- Extract style parameters
+                print(line)
+            end
+        end
+    end
+end
+
+mp.add_key_binding("I", "print_fonts", print_fonts)
