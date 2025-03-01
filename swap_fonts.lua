@@ -133,50 +133,138 @@ local function scale_ass_style(style)
         return string.format("%s=%s", key, val)
     end)
 end
+-- Approach one: Get the first one
+-- local function get_default_font_and_styles(sub_data)
+--     local in_styles_section = false
+--     local default_font = nil
+--     local styles = {}
+--     local target_font = nil
+    
+--     -- Add more blacklist terms here (lowercase)
+--     local blacklist = {
+--         "sign",  
+--         "song",
+--         "ed",
+--         "op",
+--         "title",
+        
+--     }
 
+--     for line in sub_data:gmatch("[^\r\n]+") do
+--         if line:match("Styles%]$") then
+--             in_styles_section = true
+--         elseif in_styles_section then
+--             if line:match("^Style:") then
+--                 local params = {}
+--                 for param in line:sub(7):gmatch("([^,]+)") do
+--                     table.insert(params, param:match("^%s*(.-)%s*$"))
+--                 end
+                
+--                 if #params >= 2 then
+--                     local style_name = params[1]
+--                     local font_name = params[2]
+--                     local lower_name = style_name:lower()
+
+--                     -- Check against blacklist
+--                     for _, term in ipairs(blacklist) do
+--                         if lower_name:find(term) then
+--                             goto continue
+--                         end
+--                     end
+                    
+--                     -- Set target font from first style
+--                     if not target_font then
+--                         target_font = font_name
+--                         default_font = style_name
+--                     end
+                    
+--                     -- Collect all styles using target font
+--                     if font_name == target_font then
+--                         table.insert(styles, style_name)
+--                     end
+--                 end
+--                 ::continue::
+--             end
+--         end
+--     end
+    
+--     return default_font, styles
+-- end
+
+-- Approach two: Get the most popular one
 local function get_default_font_and_styles(sub_data)
-    local in_styles_section = false
-    local default_font = nil
-    local styles = {}
-    local target_font = nil
-
+    local blacklist = {
+        "sign", "song", "^ed", "^op", "title"
+    }
+    
+    local valid_styles = {}  -- Stores {name, font, size}
+    local font_counts = {}  -- Tracks font+size popularity
+    
     for line in sub_data:gmatch("[^\r\n]+") do
         if line:match("Styles%]$") then
-            in_styles_section = true
-        elseif in_styles_section then
-            if line:match("^Style:") then
+            for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
                 local params = {}
-                for param in line:sub(7):gmatch("([^,]+)") do
+                for param in style_line:gmatch("([^,]+)") do
                     table.insert(params, param:match("^%s*(.-)%s*$"))
                 end
                 
-                if #params >= 2 then
+                if #params >= 3 then  -- Need at least 3 params (name, font, size)
                     local style_name = params[1]
                     local font_name = params[2]
-                    local lower_name = style_name:lower()  -- Case-insensitive check
-                    
-                    -- Skip styles containing "sign" or "song" in any part
-                    if lower_name:find("sign") or lower_name:find("song") then
-                        goto continue
+                    local font_size = params[3]
+                    local lower_name = style_name:lower()
+
+                    -- Check blacklist patterns
+                    local skip = false
+                    for _, pattern in ipairs(blacklist) do
+                        if lower_name:find(pattern) then
+                            skip = true
+                            break
+                        end
                     end
                     
-                    -- Set target font from first style
-                    if not target_font then
-                        target_font = font_name
-                        default_font = style_name
-                    end
-                    
-                    -- Collect all styles using target font
-                    if font_name == target_font then
-                        table.insert(styles, style_name)
+                    if not skip then
+                        local font_key = font_name .. "|" .. font_size
+                        table.insert(valid_styles, {
+                            name = style_name,
+                            font = font_name,
+                            size = font_size,
+                            key = font_key
+                        })
+                        font_counts[font_key] = (font_counts[font_key] or 0) + 1
                     end
                 end
-                ::continue::
+            end
+            break
+        end
+    end
+
+    -- Find most popular font+size combination
+    local max_count, popular_key = 0, nil
+    for key, count in pairs(font_counts) do
+        if count > max_count or (count == max_count and not popular_key) then
+            max_count = count
+            popular_key = key
+        end
+    end
+
+    -- Extract font name and size from popular key
+    local popular_font, popular_size
+    if popular_key then
+        popular_font, popular_size = popular_key:match("([^|]+)|(.+)")
+    end
+
+    -- Collect all styles using the popular font+size
+    local styles = {}
+    if popular_key then
+        for _, style in ipairs(valid_styles) do
+            if style.key == popular_key then
+                table.insert(styles, style.name)
             end
         end
     end
     
-    return default_font, styles
+    return popular_font, popular_size, styles
 end
 
 local function prefix_style_with_styles(style_names, scaled_style)
@@ -204,15 +292,19 @@ local function apply_ass_style()
     
     local scaled_style = scale_ass_style(style)
 
-    if state.ass_small_font then
-        scaled_style = scaled_style .. string.format(",FontSize=%d", 
-            math.floor(23 * get_playres_scale()))
-    end
+    -- if state.ass_small_font then
+    --     scaled_style = scaled_style .. string.format(",FontSize=%d", 
+    --         math.floor(23 * get_playres_scale()))
+    -- end
 
     -- Try to only apply to the default font
     local sub_data = mp.get_property("sub-ass-extradata", "")
 
-    local default_style_name, matching_styles = get_default_font_and_styles(sub_data)
+    local default_style_name, default_size, matching_styles = get_default_font_and_styles(sub_data)
+
+    if state.ass_small_font then
+        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((0.95*default_size) + 0.5))
+    end
 
     if #matching_styles > 0 then
         scaled_style = prefix_style_with_styles(matching_styles, scaled_style)
@@ -221,10 +313,10 @@ local function apply_ass_style()
     -- print("Scaled style is now: " .. scaled_style)
     -- Fix LayoutRes
     local layoutResY = tonumber(sub_data:match("LayoutResY:%s*(%d+)")) or ""
-    
-    if layoutResY == "" then
+    local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
+
+    if layoutResY == "" and playresy < 720 then
         local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)"))
-        local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
         if playresx ~= "" then
             local layoutresString = string.format("LayoutResX=%s,LayoutResY=%s", playresx, playresy)
             scaled_style =  layoutresString .. ',' .. scaled_style
@@ -348,6 +440,7 @@ local function print_script_info()
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or 360
 
+    print(sub_data)
     local video_path = mp.get_property("path", "N/A")
     local current_track = mp.get_property_native("current-tracks/sub", {})
     local style_overrides = format_style_overrides(mp.get_property("sub-ass-style-overrides", "None"))
