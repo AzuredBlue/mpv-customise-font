@@ -20,7 +20,7 @@ local state = {
             -- "FontName=Gandhi Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
             -- ""
             -- "FontName=Netflix Sans,Bold=1,Outline=2,Shadow=0,Blur=7",
-            "FontName=Gandhi Sans,Bold=1,Outline=1.3,Shadow=0.5,ShadowX=2,ShadowY=2",
+            "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
             "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
             ""
         },
@@ -133,6 +133,7 @@ local function scale_ass_style(style)
         return string.format("%s=%s", key, val)
     end)
 end
+
 -- Approach one: Get the first one
 -- local function get_default_font_and_styles(sub_data)
 --     local in_styles_section = false
@@ -194,7 +195,7 @@ end
 -- Approach two: Get the most popular one
 local function get_default_font_and_styles(sub_data)
     local blacklist = {
-        "sign", "song", "^ed", "^op", "title"
+        "sign", "song", "^ed", "^op", "title", "^os"
     }
     
     local valid_styles = {}  -- Stores {name, font, size}
