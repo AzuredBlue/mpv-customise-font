@@ -49,7 +49,7 @@ local options = {
                 bold = true,
                 blur = 0,
                 border_color = "#000000",
-                border_size = 2.5,
+                border_size = 2.2,
                 shadow_color = "#000000",
                 shadow_offset = 1
             },
@@ -116,7 +116,7 @@ local function get_playres_scale()
     if sub_data == "" then
         return 1.0
     end
-    
+
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or DEFAULT_PLAYRESY
 
@@ -254,7 +254,7 @@ local function apply_ass_style()
 
     local default_style_name, default_size, matching_styles = get_default_font_and_styles(sub_data)
 
-    if options.debug and options.only_modify_default_font then
+    if options.debug and options.only_modify_default_font and scaled_style ~= "" then
         local style_list = #matching_styles > 0 and table.concat(matching_styles, ", ") or "none"
         msg.info(("Replacing font '%s' (size %s) used by %d styles: %s")
             :format(
@@ -321,12 +321,20 @@ local function load_config()
     
     local json_data = utils.parse_json(content)
     if type(json_data) == "table" then
-        options.ass_index = json_data.ass_index or options.ass_index
-        options.non_ass_index = json_data.non_ass_index or options.non_ass_index
-        options.font_size = json_data.font_size or options.font_size
-        
-        if json_data.ass_small_font ~= nil then
-            options.ass_small_font = json_data.ass_small_font
+        local config_keys = {
+            "debug",
+            "set_sub_pos",
+            "only_modify_default_font",
+            "ass_index",
+            "non_ass_index",
+            "font_size",
+            "ass_small_font"
+        }
+
+        for _, key in ipairs(config_keys) do
+            if json_data[key] ~= nil then
+                options[key] = json_data[key]
+            end
         end
     end
 end
@@ -339,13 +347,38 @@ local function save_config()
     if not file then return end
     
     local config_to_save = {
+        debug = options.debug,
+        set_sub_pos = options.set_sub_pos,
+        only_modify_default_font = options.only_modify_default_font,
         ass_index = options.ass_index,
         non_ass_index = options.non_ass_index,
         font_size = options.font_size,
         ass_small_font = options.ass_small_font
     }
     
-    local json_content = utils.format_json(config_to_save)
+    local json_content = "{\n"
+    local first = true
+    local key_order = {  -- Maintain consistent key order
+        "debug", "set_sub_pos", "only_modify_default_font",
+        "ass_index", "non_ass_index", "font_size", "ass_small_font"
+    }
+    
+    for _, key in ipairs(key_order) do
+        if config_to_save[key] ~= nil then
+            if not first then
+                json_content = json_content .. ",\n"
+            end
+            json_content = json_content .. string.format(
+                '  "%s": %s',
+                key,
+                utils.format_json(config_to_save[key])
+            )
+            first = false
+        end
+    end
+    
+    json_content = json_content .. "\n}"
+    
     file:write(json_content)
     file:close()
 end
@@ -388,7 +421,6 @@ mp.register_event("file-loaded", function()
     if is_ass_subtitle() then
         apply_ass_style()
     else
-        print(mp.get_property('sub-font-size'))
         apply_non_ass_style()
     end
 end)
