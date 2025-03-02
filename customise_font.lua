@@ -1,6 +1,7 @@
 local mp = require 'mp'
 local utils = require 'mp.utils'
 local msg = require 'mp.msg'
+local mpoptions = require('mp.options')
 
 local CONFIG_FILENAME = "customise_font.conf"
 local DEFAULT_PLAYRESX = 640
@@ -13,56 +14,57 @@ local options = {
     only_modify_default_font = true,
     -- Font sizes for SRT. 44 seems to be the best for me.
     DEFAULT_FONT_SIZE = 44,
-    SMALL_FONT_SIZE = 44 - 2,
+    SMALL_FONT_SIZE = 42,
 
     -- Default style values
     ass_index = 1,
     non_ass_index = 1,
-    font_size = DEFAULT_FONT_SIZE,
-    ass_small_font = false,
-    
-    -- Add your own styles here
-    styles = {
-        -- ASS Styles:
-        ass = {
-            "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-            "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
-            "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
-            -- I recommend leaving this here, so you can always cycle back to default
-            ""
+    small_font = false,
+}
+
+mpoptions.read_options(options, "customise_font")
+
+-- Add your own styles here 
+local styles = {
+    -- ASS Styles:
+    ass = {
+        "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
+        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
+        "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
+        -- I recommend leaving this here, so you can always cycle back to default
+        ""
+    },
+    -- Other styles, such as SRT:
+    non_ass = {
+        {
+            name = "Netflix Style",
+            font = "Netflix Sans", 
+            bold = true,
+            blur = 3,
+            border_color = "#000000",
+            border_size = 2,
+            shadow_color = "#000000",
+            shadow_offset = 0
         },
-        -- Other styles, such as SRT:
-        non_ass = {
-            {
-                name = "Netflix Style",
-                font = "Netflix Sans", 
-                bold = true,
-                blur = 3,
-                border_color = "#000000",
-                border_size = 2,
-                shadow_color = "#000000",
-                shadow_offset = 0
-            },
-            {
-                name = "Gandhi Style",
-                font = "Gandhi Sans",
-                bold = true,
-                blur = 0,
-                border_color = "#000000",
-                border_size = 2.2,
-                shadow_color = "#000000",
-                shadow_offset = 1
-            },
-            {
-                name = "CR",
-                font = "Trebuchet MS",
-                bold = true,
-                blur = 0,
-                border_color = "#000000",
-                border_size = 3,
-                shadow_color = "#000000",
-                shadow_offset = 1.5
-            }
+        {
+            name = "Gandhi Style",
+            font = "Gandhi Sans",
+            bold = true,
+            blur = 0,
+            border_color = "#000000",
+            border_size = 2.2,
+            shadow_color = "#000000",
+            shadow_offset = 1
+        },
+        {
+            name = "CR",
+            font = "Trebuchet MS",
+            bold = true,
+            blur = 0,
+            border_color = "#000000",
+            border_size = 3,
+            shadow_color = "#000000",
+            shadow_offset = 1.5
         }
     }
 }
@@ -243,7 +245,7 @@ local function prefix_style_with_styles(style_names, scaled_style)
 end
 
 local function apply_ass_style()
-    local style = options.styles.ass[options.ass_index]
+    local style = styles.ass[options.ass_index]
     if not style then return end
     
     -- Scale the style based on the PlayRes
@@ -265,7 +267,7 @@ local function apply_ass_style()
             ))
     end
 
-    if options.ass_small_font then
+    if options.small_font then
         scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((0.95*default_size) + 0.5))
     end
 
@@ -293,12 +295,18 @@ local function apply_ass_style()
 end
 
 local function apply_non_ass_style()
-    local style = options.styles.non_ass[options.non_ass_index]
+    local style = styles.non_ass[options.non_ass_index]
     if not style then return end
-    
+
+    -- Scale font size based on small_font
+    font_size = options.DEFAULT_FONT_SIZE
+    if options.small_font then
+        font_size = options.SMALL_FONT_SIZE
+    end
+
     mp.set_property_native("sub-font", style.font)
     mp.set_property_native("sub-bold", style.bold)
-    mp.set_property_native("sub-font-size", options.font_size)
+    mp.set_property_native("sub-font-size", font_size)
     mp.set_property_native("sub-blur", style.blur)
     mp.set_property_native("sub-border-color", style.border_color)
     mp.set_property_native("sub-border-size", style.border_size)
@@ -306,80 +314,47 @@ local function apply_non_ass_style()
     mp.set_property_native("sub-shadow-offset", style.shadow_offset)
 
     if options.set_sub_pos then
-        mp.set_property("sub-pos", 100)
+        mp.set_property("sub-pos", 98)
     end
     
-end
-
-local function load_config()
-    local config_path = utils.join_path(get_config_path(), CONFIG_FILENAME)
-    local file = io.open(config_path, "r")
-    if not file then return end
-    
-    local content = file:read("*all")
-    file:close()
-    
-    local json_data = utils.parse_json(content)
-    if type(json_data) == "table" then
-        local config_keys = {
-            "debug",
-            "set_sub_pos",
-            "only_modify_default_font",
-            "ass_index",
-            "non_ass_index",
-            "font_size",
-            "ass_small_font"
-        }
-
-        for _, key in ipairs(config_keys) do
-            if json_data[key] ~= nil then
-                options[key] = json_data[key]
-            end
-        end
-    end
 end
 
 local function save_config()
     if not ensure_config_directory() then return end
     
     local config_path = utils.join_path(get_config_path(), CONFIG_FILENAME)
-    local file = io.open(config_path, "w")
-    if not file then return end
     
-    local config_to_save = {
-        debug = options.debug,
-        set_sub_pos = options.set_sub_pos,
-        only_modify_default_font = options.only_modify_default_font,
-        ass_index = options.ass_index,
-        non_ass_index = options.non_ass_index,
-        font_size = options.font_size,
-        ass_small_font = options.ass_small_font
-    }
-    
-    local json_content = "{\n"
-    local first = true
-    local key_order = {  -- Maintain consistent key order
-        "debug", "set_sub_pos", "only_modify_default_font",
-        "ass_index", "non_ass_index", "font_size", "ass_small_font"
-    }
-    
-    for _, key in ipairs(key_order) do
-        if config_to_save[key] ~= nil then
-            if not first then
-                json_content = json_content .. ",\n"
+    -- Preserve original config
+    local preserved_lines = {}
+    local file = io.open(config_path, "r")
+    if file then
+        for line in file:lines() do
+            if not line:match("^%s*ass_index%s*=") and
+               not line:match("^%s*non_ass_index%s*=") and
+               not line:match("^%s*small_font%s*=") then
+                table.insert(preserved_lines, line)
             end
-            json_content = json_content .. string.format(
-                '  "%s": %s',
-                key,
-                utils.format_json(config_to_save[key])
-            )
-            first = false
         end
+        file:close()
     end
-    
-    json_content = json_content .. "\n}"
-    
-    file:write(json_content)
+
+    local content = {
+        string.format("ass_index=%d", options.ass_index),
+        string.format("non_ass_index=%d", options.non_ass_index),
+        string.format("small_font=%s", options.small_font and "yes" or "no")
+    }
+
+    -- Merge preserved content with new dynamic values
+    local new_content = table.concat(preserved_lines, "\n")
+    if #preserved_lines > 0 and #preserved_lines[#preserved_lines] > 0 then
+        new_content = new_content .. "\n"
+    end
+    new_content = new_content .. table.concat(content, "\n")
+
+    -- Write to file
+    file = io.open(config_path, "w")
+    if not file then return end
+    file:write(new_content)
     file:close()
 end
 
@@ -389,35 +364,32 @@ local function is_ass_subtitle()
 end
 
 local function toggle_font_size()
+    options.small_font = not options.small_font
     if is_ass_subtitle() then
-        options.ass_small_font = not options.ass_small_font
         apply_ass_style()
-        mp.osd_message("ASS Font Size: " .. (options.ass_small_font and "Small" or "Normal"), 2)
+        mp.osd_message("ASS Font Size: " .. (options.small_font and "Small" or "Normal"), 2)
     else
-        options.font_size = options.font_size == options.DEFAULT_FONT_SIZE 
-            and options.SMALL_FONT_SIZE 
-            or options.DEFAULT_FONT_SIZE
         apply_non_ass_style()
-        mp.osd_message("SRT Font Size: " .. options.font_size, 2)
+        mp.osd_message("SRT Font Size: " .. (options.small_font and "Small" or "Normal"), 2)
     end
     save_config()
 end
 
 local function cycle_styles(direction)
     if is_ass_subtitle() then
-        options.ass_index = (options.ass_index + direction - 1) % #options.styles.ass + 1
+        options.ass_index = (options.ass_index + direction - 1) % #styles.ass + 1
         apply_ass_style()
         mp.osd_message("ASS Style: " .. options.ass_index, 2)
     else
-        options.non_ass_index = (options.non_ass_index + direction - 1) % #options.styles.non_ass + 1
+        options.non_ass_index = (options.non_ass_index + direction - 1) % #styles.non_ass + 1
         apply_non_ass_style()
-        mp.osd_message("SRT Style: " .. options.styles.non_ass[options.non_ass_index].name, 2)
+        mp.osd_message("SRT Style: " .. styles.non_ass[options.non_ass_index].name, 2)
     end
     save_config()
 end
 
 mp.register_event("file-loaded", function()
-    load_config()
+    -- load_config()
     if is_ass_subtitle() then
         apply_ass_style()
     else
