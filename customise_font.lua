@@ -8,7 +8,7 @@ local DEFAULT_PLAYRESY = 360
 
 local options = {
     -- Options
-    debug = true,
+    debug = false,
     set_sub_pos = true,
     only_modify_default_font = true,
     -- Font sizes for SRT. 44 seems to be the best for me.
