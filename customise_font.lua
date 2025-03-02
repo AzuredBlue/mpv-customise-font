@@ -323,39 +323,39 @@ local function save_config()
     if not ensure_config_directory() then return end
     
     local config_path = utils.join_path(get_config_path(), CONFIG_FILENAME)
-    
-    -- Preserve original config
-    local preserved_lines = {}
+    local dynamic = {
+        ass_index = options.ass_index,
+        non_ass_index = options.non_ass_index,
+        small_font = options.small_font and "yes" or "no"
+    }
+
+    local lines = {}
+    local handled = {}
     local file = io.open(config_path, "r")
     if file then
         for line in file:lines() do
-            if not line:match("^%s*ass_index%s*=") and
-               not line:match("^%s*non_ass_index%s*=") and
-               not line:match("^%s*small_font%s*=") then
-                table.insert(preserved_lines, line)
+            local key = line:match("^%s*([%w_]+)%s*=")
+            if key and dynamic[key] then
+                table.insert(lines, string.format("%s=%s", key, dynamic[key]))
+                handled[key] = true
+            else
+                table.insert(lines, line)
             end
         end
         file:close()
     end
 
-    local content = {
-        string.format("ass_index=%d", options.ass_index),
-        string.format("non_ass_index=%d", options.non_ass_index),
-        string.format("small_font=%s", options.small_font and "yes" or "no")
-    }
-
-    -- Merge preserved content with new dynamic values
-    local new_content = table.concat(preserved_lines, "\n")
-    if #preserved_lines > 0 and #preserved_lines[#preserved_lines] > 0 then
-        new_content = new_content .. "\n"
+    for key, value in pairs(dynamic) do
+        if not handled[key] then
+            table.insert(lines, string.format("%s=%s", key, value))
+        end
     end
-    new_content = new_content .. table.concat(content, "\n")
 
-    -- Write to file
     file = io.open(config_path, "w")
-    if not file then return end
-    file:write(new_content)
-    file:close()
+    if file then
+        file:write(table.concat(lines, "\n"))
+        file:close()
+    end
 end
 
 local function is_ass_subtitle()
@@ -389,7 +389,6 @@ local function cycle_styles(direction)
 end
 
 mp.register_event("file-loaded", function()
-    -- load_config()
     if is_ass_subtitle() then
         apply_ass_style()
     else
