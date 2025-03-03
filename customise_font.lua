@@ -15,19 +15,26 @@ DEFAULT_SIZE = nil
 MATCHING_STYLES = {}
 sub_data = nil
 
+-- All of these options can be modified in the customise_font.conf
 local options = {
-    -- Options
+    -- Show which fonts are being replaced
     debug = false,
+    -- If it should set the subs to a higher position than default
     set_sub_pos = true,
+    -- If it should only try to modify the font used for subtitles, instead of all
     only_modify_default_font = true,
+    
     -- Font sizes for SRT. 44 seems to be the best for me.
-    DEFAULT_FONT_SIZE = 44,
-    SMALL_FONT_SIZE = 42,
+    -- Scale is the value the default font size is multiplied by
+    -- when alternate_size is on. I recommend values 0.9 - 1.1
+    default_font_size = 44,
+    alternate_font_scale = 0.95,
 
     -- Default style values
+    -- These are modified whenever you change style, no need to manually modify them
     ass_index = 1,
     non_ass_index = 1,
-    small_font = false,
+    alternate_size = false,
 }
 
 mpoptions.read_options(options, "customise_font")
@@ -274,8 +281,8 @@ local function apply_ass_style()
     -- Scale the style based on the PlayRes
     local scaled_style = scale_ass_style(style)
 
-    if options.small_font then
-        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((0.95*DEFAULT_SIZE) + 0.5))
+    if options.alternate_size then
+        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((options.alternate_font_scale*DEFAULT_SIZE) + 0.5))
     end
 
     if #MATCHING_STYLES > 0 then
@@ -305,10 +312,10 @@ local function apply_non_ass_style()
     local style = styles.non_ass[options.non_ass_index]
     if not style then return end
 
-    -- Scale font size based on small_font
-    font_size = options.DEFAULT_FONT_SIZE
-    if options.small_font then
-        font_size = options.SMALL_FONT_SIZE
+    -- Scale font size based on alternate_size
+    font_size = options.default_font_size
+    if options.alternate_size then
+        font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
     end
 
     mp.set_property_native("sub-font", style.font)
@@ -333,7 +340,7 @@ local function save_config()
     local dynamic = {
         ass_index = options.ass_index,
         non_ass_index = options.non_ass_index,
-        small_font = options.small_font and "yes" or "no"
+        alternate_size = options.alternate_size and "yes" or "no"
     }
 
     local lines = {}
@@ -372,13 +379,13 @@ local function is_ass_subtitle()
 end
 
 local function toggle_font_size()
-    options.small_font = not options.small_font
+    options.alternate_size = not options.alternate_size
     if is_ass_subtitle() then
         apply_ass_style()
-        mp.osd_message("ASS Font Size: " .. (options.small_font and "Small" or "Normal"), 2)
+        mp.osd_message("ASS Font Size: " .. (options.alternate_size and "Alt" or "Normal"), 2)
     else
         apply_non_ass_style()
-        mp.osd_message("SRT Font Size: " .. (options.small_font and "Small" or "Normal"), 2)
+        mp.osd_message("SRT Font Size: " .. (options.alternate_size and "Alt" or "Normal"), 2)
     end
     save_config()
 end
