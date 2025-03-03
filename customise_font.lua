@@ -3,9 +3,17 @@ local utils = require 'mp.utils'
 local msg = require 'mp.msg'
 local mpoptions = require('mp.options')
 
-local CONFIG_FILENAME = "customise_font.conf"
-local DEFAULT_PLAYRESX = 640
-local DEFAULT_PLAYRESY = 360
+CONFIG_FILENAME = "customise_font.conf"
+DEFAULT_PLAYRESX = 640
+DEFAULT_PLAYRESY = 360
+
+-- The fonts to be replaced with "only_modify_default_font"
+-- Default meaning the main font used for subtitles
+-- avoiding to replace other fonts, like signs
+DEFAULT_STYLE_NAME = nil
+DEFAULT_SIZE = nil
+MATCHING_STYLES = {}
+sub_data = nil
 
 local options = {
     -- Options
@@ -113,8 +121,6 @@ local function ensure_config_directory()
 end
 
 local function get_playres_scale()
-    local sub_data = mp.get_property("sub-ass-extradata") or ""
-    
     if sub_data == "" then
         return 1.0
     end
@@ -149,7 +155,9 @@ local function scale_ass_style(style)
 end
 
 -- Try to get the 'most popular one'
-local function get_default_font_and_styles(sub_data)
+local function get_default_font_and_styles()
+    if not options.only_modify_default_font then return end
+
     local blacklist = {
         "sign", "song", "^ed", "^op", "title", "^os"
     }
@@ -175,6 +183,7 @@ local function get_default_font_and_styles(sub_data)
                     local skip = false
                     for _, pattern in ipairs(blacklist) do
                         if lower_name:find(pattern) then
+                            if options.debug then print("Skipped " .. lower_name .. " because it matched " .. pattern) end
                             skip = true
                             break
                         end
@@ -221,7 +230,21 @@ local function get_default_font_and_styles(sub_data)
         end
     end
     
-    return popular_font, popular_size, styles
+    DEFAULT_STYLE_NAME = popular_font
+    DEFAULT_SIZE = popular_size
+    MATCHING_STYLES = styles
+
+    if options.debug then
+        local style_list = #MATCHING_STYLES > 0 and table.concat(MATCHING_STYLES, ", ") or "none"
+        msg.info(("Replacing font '%s' (size %s) used by %d styles: %s")
+            :format(
+                DEFAULT_STYLE_NAME or "nil",
+                DEFAULT_SIZE or "nil",
+                #MATCHING_STYLES,
+                style_list
+            ))
+    end
+    -- return popular_font, popular_size, styles
 end
 
 -- Prefix the style with the style names, so it only changes them.
@@ -251,28 +274,12 @@ local function apply_ass_style()
     -- Scale the style based on the PlayRes
     local scaled_style = scale_ass_style(style)
 
-    -- Try to only apply to the default font
-    local sub_data = mp.get_property("sub-ass-extradata", "")
-
-    local default_style_name, default_size, matching_styles = get_default_font_and_styles(sub_data)
-
-    if options.debug and options.only_modify_default_font and scaled_style ~= "" then
-        local style_list = #matching_styles > 0 and table.concat(matching_styles, ", ") or "none"
-        msg.info(("Replacing font '%s' (size %s) used by %d styles: %s")
-            :format(
-                default_style_name or "nil",
-                default_size or "nil",
-                #matching_styles,
-                style_list
-            ))
-    end
-
     if options.small_font then
-        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((0.95*default_size) + 0.5))
+        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((0.95*DEFAULT_SIZE) + 0.5))
     end
 
-    if #matching_styles > 0 and options.only_modify_default_font then
-        scaled_style = prefix_style_with_styles(matching_styles, scaled_style)
+    if #MATCHING_STYLES > 0 then
+        scaled_style = prefix_style_with_styles(MATCHING_STYLES, scaled_style)
     end
 
     -- Fix LayoutRes
@@ -351,6 +358,7 @@ local function save_config()
         end
     end
 
+    -- Write updated content
     file = io.open(config_path, "w")
     if file then
         file:write(table.concat(lines, "\n"))
@@ -389,6 +397,8 @@ local function cycle_styles(direction)
 end
 
 mp.register_event("file-loaded", function()
+    sub_data = mp.get_property("sub-ass-extradata") or ""
+    get_default_font_and_styles()
     if is_ass_subtitle() then
         apply_ass_style()
     else
