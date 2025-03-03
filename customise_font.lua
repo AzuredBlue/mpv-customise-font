@@ -3,7 +3,6 @@ local utils = require 'mp.utils'
 local msg = require 'mp.msg'
 local mpoptions = require('mp.options')
 
-CONFIG_FILENAME = "customise_font.conf"
 DEFAULT_PLAYRESX = 640
 DEFAULT_PLAYRESY = 360
 
@@ -23,7 +22,7 @@ local options = {
     set_sub_pos = true,
     -- If it should only try to modify the font used for subtitles, instead of all
     only_modify_default_font = true,
-    
+
     -- Font sizes for SRT. 44 seems to be the best for me.
     -- Scale is the value the default font size is multiplied by
     -- when alternate_size is on. I recommend values 0.9 - 1.1
@@ -144,8 +143,7 @@ local function get_playres_scale()
     end
 end
 
-local function scale_ass_style(style)
-    local scale = get_playres_scale()
+local function scale_ass_style(style, scale)
     if scale == 1 then return style end
     
     return style:gsub("([%w]+)=([%d%.]+)", function(key, val)
@@ -251,7 +249,7 @@ local function get_default_font_and_styles()
                 style_list
             ))
     end
-    -- return popular_font, popular_size, styles
+
 end
 
 -- Prefix the style with the style names, so it only changes them.
@@ -279,11 +277,16 @@ local function apply_ass_style()
     if not style then return end
     
     -- Scale the style based on the PlayRes
-    local scaled_style = scale_ass_style(style)
+    local scale = get_playres_scale()
+    local scaled_style = style
 
     if options.alternate_size then
+        -- Scale it more up/down depending on the alternate font scale
+        scale = scale * options.alternate_font_scale
         scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((options.alternate_font_scale*DEFAULT_SIZE) + 0.5))
     end
+
+    scaled_style = scale_ass_style(scaled_style, scale)
 
     if #MATCHING_STYLES > 0 then
         scaled_style = prefix_style_with_styles(MATCHING_STYLES, scaled_style)
@@ -336,7 +339,7 @@ end
 local function save_config()
     if not ensure_config_directory() then return end
     
-    local config_path = utils.join_path(get_config_path(), CONFIG_FILENAME)
+    local config_path = utils.join_path(get_config_path(), "customise_font.conf")
     local dynamic = {
         ass_index = options.ass_index,
         non_ass_index = options.non_ass_index,
