@@ -43,8 +43,10 @@ local styles = {
     -- ASS Styles:
     ass = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
-        "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
+       --  "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
+        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
+        -- "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
+        "FontName=Trebuchet MS,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -65,9 +67,9 @@ local styles = {
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
-            border_color = "#000000",
+            border_color = "#182740",
             border_size = 2.2,
-            shadow_color = "#000000",
+            shadow_color = "#182740",
             shadow_offset = 1
         },
         {
@@ -75,9 +77,9 @@ local styles = {
             font = "Trebuchet MS",
             bold = true,
             blur = 0,
-            border_color = "#000000",
+            border_color = "#182740",
             border_size = 3,
-            shadow_color = "#000000",
+            shadow_color = "#182740",
             shadow_offset = 1.5
         }
     }
@@ -164,7 +166,7 @@ local function get_default_font_and_styles()
     if not options.only_modify_default_font then return end
 
     local blacklist = {
-        "sign", "song", "^ed", "^op", "title", "^os"
+        "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening"
     }
     
     local valid_styles = {}  -- Stores {name, font, size}
@@ -408,13 +410,25 @@ end
 
 mp.register_event("file-loaded", function()
     sub_data = mp.get_property("sub-ass-extradata") or ""
-    get_default_font_and_styles()
     if is_ass_subtitle() then
+        get_default_font_and_styles()
         apply_ass_style()
     else
         apply_non_ass_style()
     end
 end)
+
+-- Change default font when the subtitles are changed
+mp.observe_property("current-tracks/sub", "native", function(name, value)
+    if is_ass_subtitle() then
+        if options.debug then
+            print("Detected change in subtitle tracks!")
+        end
+        sub_data = mp.get_property("sub-ass-extradata") or ""
+        get_default_font_and_styles()
+    end
+end
+)
 
 -- Key Bindings
 mp.add_key_binding("k", "cycle_styles_forward", function() cycle_styles(1) end)
