@@ -43,10 +43,10 @@ local styles = {
     -- ASS Styles:
     ass = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-       --  "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
-        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
-        -- "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
-        "FontName=Trebuchet MS,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
+        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.5",
+        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.5",
+        -- "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1",
+        -- "FontName=Trebuchet MS,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.8,Shadow=1",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -150,12 +150,11 @@ local function scale_ass_style(style, scale)
     
     return style:gsub("([%w]+)=([%d%.]+)", function(key, val)
         local scaled_properties = {
-            Outline = true, Shadow = true, 
-            ShadowX = true, ShadowY = true
+            Outline = true, Shadow = true
         }
         
         if scaled_properties[key] then
-            return string.format("%s=%.1f", key, tonumber(val) * scale)
+            return string.format("%s=%.1f", key, math.floor(tonumber(val) * scale) + 0.5)
         end
         return string.format("%s=%s", key, val)
     end)
@@ -295,16 +294,18 @@ local function apply_ass_style()
     end
 
     -- Fix LayoutRes
-    local layoutResY = tonumber(sub_data:match("LayoutResY:%s*(%d+)")) or ""
-    local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
+    -- Instead use sub-ass-use-video-data=aspect-ratio 
+    
+    -- local layoutResY = tonumber(sub_data:match("LayoutResY:%s*(%d+)")) or ""
+    -- local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
 
-    if layoutResY == "" and playresy < 720 then
-        local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)"))
-        if playresx ~= "" then
-            local layoutresString = string.format("LayoutResX=%s,LayoutResY=%s", playresx, playresy)
-            scaled_style =  layoutresString .. ',' .. scaled_style
-        end
-    end
+    -- if layoutResY == "" and playresy < 720 then
+    --     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)"))
+    --     if playresx ~= "" then
+    --         local layoutresString = string.format("LayoutResX=%s,LayoutResY=%s", playresx, playresy)
+    --         scaled_style =  layoutresString .. ',' .. scaled_style
+    --     end
+    -- end
     
     mp.set_property("sub-ass-style-overrides", scaled_style)
     
