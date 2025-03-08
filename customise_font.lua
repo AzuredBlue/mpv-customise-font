@@ -154,7 +154,7 @@ local function scale_ass_style(style, scale)
         }
         
         if scaled_properties[key] then
-            return string.format("%s=%.1f", key, math.floor(tonumber(val) * scale) + 0.5)
+            return string.format("%s=%.1f", key, tonumber(val) * scale)
         end
         return string.format("%s=%s", key, val)
     end)
