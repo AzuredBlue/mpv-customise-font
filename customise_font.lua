@@ -432,6 +432,7 @@ mp.observe_property("current-tracks/sub", "native", function(name, value)
             print("Detected change in subtitle tracks!")
         end
         get_default_font_and_styles()
+        apply_ass_style()
     else
         apply_non_ass_style()
     end
