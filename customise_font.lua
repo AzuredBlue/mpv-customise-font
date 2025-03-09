@@ -174,7 +174,7 @@ end
 local function get_default_font_and_styles()
     if not options.only_modify_default_font then return end
     if not sub_data or not sub_data:find("Styles%]") then return end
-    
+
     local blacklist = { "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening" }
     local whitelist = { "default" }
 
@@ -214,7 +214,7 @@ local function get_default_font_and_styles()
                 local font_name = params[2]
                 local font_size = params[3]
                 local key = font_name .. "|" .. font_size
-
+                
                 if not freq[key] then
                     freq[key] = 0
                     table.insert(orderKeys, key)
@@ -258,9 +258,20 @@ local function get_default_font_and_styles()
     end
     if not chosenKey then
         chosenKey = firstTiedKey
-        if options.debug then
+        if options.debug and chosenKey ~= nil then
             print("Chosen key was " .. chosenKey .. " because it was the first tied key in the file")
         end
+    end
+
+    -- For some reason, this runs faster than auto-selecting subtitles
+    -- So sub_data can have old information
+    -- If sub_data happens to have only blacklisted styles, it will error
+    -- And only doing a return here will make it so it has enough time for sub_data
+    -- to update to the new track
+    -- I've spent so much time debugging this.
+    if not chosenKey then
+        print("No key was chosen!")
+        return
     end
 
     local popular_font, popular_size = chosenKey:match("([^|]+)|(.+)")
@@ -307,7 +318,7 @@ local function apply_ass_style()
     local scale = get_playres_scale()
     local scaled_style = style
 
-    if options.alternate_size then
+    if options.alternate_size and DEFAULT_SIZE ~= nil then
         -- Scale it more up/down depending on the alternate font scale
         scale = scale * options.alternate_font_scale
         scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((options.alternate_font_scale*DEFAULT_SIZE) + 0.5))
@@ -426,11 +437,11 @@ end
 
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
-    sub_data = mp.get_property("sub-ass-extradata") or ""
     if is_ass_subtitle() then
         if options.debug then
             print("Detected change in subtitle tracks!")
         end
+        sub_data = mp.get_property("sub-ass-extradata") or ""
         get_default_font_and_styles()
         apply_ass_style()
     else
