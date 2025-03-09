@@ -63,25 +63,35 @@ local styles = {
             shadow_offset = 0
         },
         {
+            name = "Gandhi Style Blue",
+            font = "Gandhi Sans",
+            bold = true,
+            blur = 0,
+            border_color = "#C0182740",
+            border_size = 2.1,
+            shadow_color = "#C0182740",
+            shadow_offset = 0.9
+        },
+        {
             name = "Gandhi Style",
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
-            border_color = "#182740",
-            border_size = 2.2,
-            shadow_color = "#182740",
-            shadow_offset = 1
+            border_color = "#000000",
+            border_size = 2.1,
+            shadow_color = "#C0000000",
+            shadow_offset = 0.9
         },
-        {
-            name = "CR",
-            font = "Trebuchet MS",
-            bold = true,
-            blur = 0,
-            border_color = "#182740",
-            border_size = 3,
-            shadow_color = "#182740",
-            shadow_offset = 1.5
-        }
+        -- {
+        --     name = "CR",
+        --     font = "Trebuchet MS",
+        --     bold = true,
+        --     blur = 0,
+        --     border_color = "#182740",
+        --     border_size = 3,
+        --     shadow_color = "#182740",
+        --     shadow_offset = 1.5
+        -- }
     }
 }
 
@@ -163,95 +173,111 @@ end
 -- Try to get the 'most popular one'
 local function get_default_font_and_styles()
     if not options.only_modify_default_font then return end
-
-    local blacklist = {
-        "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening"
-    }
+    if not sub_data or not sub_data:find("Styles%]") then return end
     
-    local valid_styles = {}  -- Stores {name, font, size}
-    local font_counts = {}  -- Tracks font+size popularity
-    
-    for line in sub_data:gmatch("[^\r\n]+") do
-        if line:match("Styles%]$") then
-            for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
-                local params = {}
-                for param in style_line:gmatch("([^,]+)") do
-                    table.insert(params, param:match("^%s*(.-)%s*$"))
-                end
-                
-                if #params >= 3 then  -- Need at least 3 params (name, font, size)
-                    local style_name = params[1]
-                    local font_name = params[2]
-                    local font_size = params[3]
-                    local lower_name = style_name:lower()
+    local blacklist = { "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening" }
+    local whitelist = { "default" }
 
-                    -- Check blacklist patterns
-                    local skip = false
-                    for _, pattern in ipairs(blacklist) do
-                        if lower_name:find(pattern) then
-                            if options.debug then print("Skipped " .. lower_name .. " because it matched " .. pattern) end
-                            skip = true
-                            break
-                        end
-                    end
-                    
-                    if not skip then
-                        local font_key = font_name .. "|" .. font_size
-                        table.insert(valid_styles, {
-                            name = style_name,
-                            font = font_name,
-                            size = font_size,
-                            key = font_key
-                        })
-                        font_counts[font_key] = (font_counts[font_key] or 0) + 1
-                    end
-                end
+    local function matches_blacklist(name)
+        local lower = name:lower()
+        for _, pat in ipairs(blacklist) do
+            if lower:find(pat) then
+                return true
             end
-            break
         end
+        return false
     end
 
-    -- Find most popular font+size combination
-    local max_count, popular_key = 0, nil
-    for key, count in pairs(font_counts) do
-        if count > max_count or (count == max_count and not popular_key) then
-            max_count = count
-            popular_key = key
+    local function matches_whitelist(name)
+        local lower = name:lower()
+        for _, pat in ipairs(whitelist) do
+            if lower == pat or lower:find(pat) then
+                return true
+            end
         end
+        return false
     end
 
-    -- Extract font name and size from popular key
-    local popular_font, popular_size
-    if popular_key then
-        popular_font, popular_size = popular_key:match("([^|]+)|(.+)")
-    end
+    local freq = {}
+    local styleNames = {}
+    local orderKeys = {}
+    local max_count = 0
 
-    -- Collect all styles using the popular font+size
-    local styles = {}
-    if popular_key then
-        for _, style in ipairs(valid_styles) do
-            if style.key == popular_key then
-                table.insert(styles, style.name)
+    for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
+        local params = {}
+        for param in style_line:gmatch("([^,]+)") do
+            table.insert(params, param:match("^%s*(.-)%s*$"))
+        end
+        if #params >= 3 then
+            local style_name = params[1]
+            if not matches_blacklist(style_name) then
+                local font_name = params[2]
+                local font_size = params[3]
+                local key = font_name .. "|" .. font_size
+
+                if not freq[key] then
+                    freq[key] = 0
+                    table.insert(orderKeys, key)
+                end
+                freq[key] = freq[key] + 1
+                if freq[key] > max_count then
+                    max_count = freq[key]
+                end
+
+                styleNames[key] = styleNames[key] or {}
+                table.insert(styleNames[key], style_name)
             end
         end
     end
-    
-    DEFAULT_STYLE_NAME = popular_font
-    DEFAULT_SIZE = popular_size
-    MATCHING_STYLES = styles
 
     if options.debug then
-        local style_list = #MATCHING_STYLES > 0 and table.concat(MATCHING_STYLES, ", ") or "none"
-        msg.info(("Replacing font '%s' (size %s) used by %d styles: %s")
-            :format(
-                DEFAULT_STYLE_NAME or "nil",
-                DEFAULT_SIZE or "nil",
-                #MATCHING_STYLES,
-                style_list
-            ))
+        print("Font+Size frequencies:")
+        for key, count in pairs(freq) do
+            print("  " .. key .. ": " .. count)
+        end
     end
 
+    -- Choose the key to replace
+    local chosenKey, firstTiedKey = nil, nil
+    for _, key in ipairs(orderKeys) do
+        if freq[key] == max_count then
+            if not firstTiedKey then
+                firstTiedKey = key
+            end
+            for _, name in ipairs(styleNames[key]) do
+                if matches_whitelist(name) then
+                    chosenKey = key
+                    if options.debug then
+                        print("Chosen key was " .. key .. " because it matched the whitelist")
+                    end
+                    break
+                end
+            end
+            if chosenKey then break end
+        end
+    end
+    if not chosenKey then
+        chosenKey = firstTiedKey
+        if options.debug then
+            print("Chosen key was " .. chosenKey .. " because it was the first tied key in the file")
+        end
+    end
+
+    local popular_font, popular_size = chosenKey:match("([^|]+)|(.+)")
+    DEFAULT_STYLE_NAME = popular_font
+    DEFAULT_SIZE = popular_size
+    MATCHING_STYLES = styleNames[chosenKey]
+
+    if options.debug then
+        local style_list_str = (#MATCHING_STYLES > 0 and table.concat(MATCHING_STYLES, ", ")) or "none"
+        print(string.format("Final decision: replacing font '%s' (size %s) used by %d styles: %s",
+            DEFAULT_STYLE_NAME or "nil",
+            DEFAULT_SIZE or "nil",
+            #MATCHING_STYLES,
+            style_list_str))
+    end
 end
+
 
 -- Prefix the style with the style names, so it only changes them.
 local function prefix_style_with_styles(style_names, scaled_style)
@@ -295,17 +321,6 @@ local function apply_ass_style()
 
     -- Fix LayoutRes
     -- Instead use sub-ass-use-video-data=aspect-ratio 
-    
-    -- local layoutResY = tonumber(sub_data:match("LayoutResY:%s*(%d+)")) or ""
-    -- local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)"))
-
-    -- if layoutResY == "" and playresy < 720 then
-    --     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)"))
-    --     if playresx ~= "" then
-    --         local layoutresString = string.format("LayoutResX=%s,LayoutResY=%s", playresx, playresy)
-    --         scaled_style =  layoutresString .. ',' .. scaled_style
-    --     end
-    -- end
     
     mp.set_property("sub-ass-style-overrides", scaled_style)
     
@@ -409,24 +424,16 @@ local function cycle_styles(direction)
     save_config()
 end
 
-mp.register_event("file-loaded", function()
-    sub_data = mp.get_property("sub-ass-extradata") or ""
-    if is_ass_subtitle() then
-        get_default_font_and_styles()
-        apply_ass_style()
-    else
-        apply_non_ass_style()
-    end
-end)
-
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
+    sub_data = mp.get_property("sub-ass-extradata") or ""
     if is_ass_subtitle() then
         if options.debug then
             print("Detected change in subtitle tracks!")
         end
-        sub_data = mp.get_property("sub-ass-extradata") or ""
         get_default_font_and_styles()
+    else
+        apply_non_ass_style()
     end
 end
 )
