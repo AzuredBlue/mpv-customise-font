@@ -9,8 +9,7 @@ DEFAULT_PLAYRESY = 360
 -- The fonts to be replaced with "only_modify_default_font"
 -- Default meaning the main font used for subtitles
 -- avoiding to replace other fonts, like signs
-DEFAULT_STYLE_NAME = nil
-DEFAULT_SIZE = nil
+DEFAULT_STYLES = {}
 MATCHING_STYLES = {}
 sub_data = nil
 
@@ -22,6 +21,12 @@ local options = {
     set_sub_pos = true,
     -- If it should only try to modify the font used for subtitles, instead of all
     only_modify_default_font = true,
+
+    -- If it should try to conserve the colors of the original fonts
+    -- If your style doesnt set the colours, it will conserve the originals
+    -- If it sets the color of the  font, this will override that if theres more than
+    -- 1 font with different colors
+    conserve_style_color = true,
 
     -- Font sizes for SRT. 44 seems to be the best for me.
     -- Scale is the value the default font size is multiplied by
@@ -44,7 +49,7 @@ local styles = {
     ass = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
         "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.5",
-        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.5",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",
         -- "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1",
         -- "FontName=Trebuchet MS,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.8,Shadow=1",
         -- I recommend leaving this here, so you can always cycle back to default
@@ -67,9 +72,9 @@ local styles = {
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
-            border_color = "#C0182740",
+            border_color = "#80182740",
             border_size = 2.1,
-            shadow_color = "#C0182740",
+            shadow_color = "#80182740",
             shadow_offset = 0.9
         },
         {
@@ -79,7 +84,7 @@ local styles = {
             blur = 0,
             border_color = "#000000",
             border_size = 2.1,
-            shadow_color = "#C0000000",
+            shadow_color = "#80000000",
             shadow_offset = 0.9
         },
         -- {
@@ -182,6 +187,9 @@ local function get_default_font_and_styles()
         local lower = name:lower()
         for _, pat in ipairs(blacklist) do
             if lower:find(pat) then
+                -- if options.debug then
+                --     print("Skipped " .. name .. " for matching " .. pat)
+                -- end
                 return true
             end
         end
@@ -199,7 +207,7 @@ local function get_default_font_and_styles()
     end
 
     local freq = {}
-    local styleNames = {}
+    local styleDetails = {}
     local orderKeys = {}
     local max_count = 0
 
@@ -208,7 +216,7 @@ local function get_default_font_and_styles()
         for param in style_line:gmatch("([^,]+)") do
             table.insert(params, param:match("^%s*(.-)%s*$"))
         end
-        if #params >= 3 then
+        if #params >= 7 then -- Need at least style name, font name, size, and 4 colors
             local style_name = params[1]
             if not matches_blacklist(style_name) then
                 local font_name = params[2]
@@ -224,13 +232,28 @@ local function get_default_font_and_styles()
                     max_count = freq[key]
                 end
 
-                styleNames[key] = styleNames[key] or {}
-                table.insert(styleNames[key], style_name)
+                styleDetails[key] = styleDetails[key] or {}
+                local style_info = {
+                    name = style_name,
+                    font = font_name,
+                    size = font_size,
+                    primary_color = params[4],
+                    secondary_color = params[5],
+                    outline_color = params[6],
+                    back_color = params[7]
+                }
+                table.insert(styleDetails[key], style_info)
+                
+                if options.debug then
+                    print(string.format("Style: %s - %s, %s, %s, %s, %s, %s", 
+                        style_name, font_name, font_size, 
+                        params[4], params[5], params[6], params[7]))
+                end
             end
         end
     end
 
-    if options.debug then
+    if options.debug and next(freq) ~= nil then
         print("Font+Size frequencies:")
         for key, count in pairs(freq) do
             print("  " .. key .. ": " .. count)
@@ -244,8 +267,8 @@ local function get_default_font_and_styles()
             if not firstTiedKey then
                 firstTiedKey = key
             end
-            for _, name in ipairs(styleNames[key]) do
-                if matches_whitelist(name) then
+            for _, style_info in ipairs(styleDetails[key]) do
+                if matches_whitelist(style_info.name) then
                     chosenKey = key
                     if options.debug then
                         print("Chosen key was " .. key .. " because it matched the whitelist")
@@ -274,27 +297,28 @@ local function get_default_font_and_styles()
         return
     end
 
-    local popular_font, popular_size = chosenKey:match("([^|]+)|(.+)")
-    DEFAULT_STYLE_NAME = popular_font
-    DEFAULT_SIZE = popular_size
-    MATCHING_STYLES = styleNames[chosenKey]
+    DEFAULT_STYLES = styleDetails[chosenKey]
+    MATCHING_STYLES = {}
+    
+    for _, style_info in ipairs(DEFAULT_STYLES) do
+        table.insert(MATCHING_STYLES, style_info.name)
+    end
 
     if options.debug then
         local style_list_str = (#MATCHING_STYLES > 0 and table.concat(MATCHING_STYLES, ", ")) or "none"
         print(string.format("Final decision: replacing font '%s' (size %s) used by %d styles: %s",
-            DEFAULT_STYLE_NAME or "nil",
-            DEFAULT_SIZE or "nil",
+            DEFAULT_STYLES[1] and DEFAULT_STYLES[1].font or "nil",
+            DEFAULT_STYLES[1] and DEFAULT_STYLES[1].size or "nil",
             #MATCHING_STYLES,
             style_list_str))
     end
 end
 
-
 -- Prefix the style with the style names, so it only changes them.
-local function prefix_style_with_styles(style_names, scaled_style)
+local function prefix_style(scaled_style)
     local all_parts = {}
     
-    for _, style_name in ipairs(style_names) do
+    for _, style_name in ipairs(MATCHING_STYLES) do
         local parts = {}
         for param in scaled_style:gmatch("([^,]+)") do
             local key, value = param:match("^([^=]+)=(.+)$")
@@ -310,6 +334,79 @@ local function prefix_style_with_styles(style_names, scaled_style)
     return table.concat(all_parts, ",")
 end
 
+local function should_conserve()
+    local unique_outline_colors = {}
+    local has_black = false
+    
+    -- Collect all unique outline colors from styles
+    for _, style_info in ipairs(DEFAULT_STYLES) do
+        local outline_color = style_info.outline_color
+        
+        if outline_color then
+            if not unique_outline_colors[outline_color] then
+                unique_outline_colors[outline_color] = true
+            end
+        end
+    end
+    
+    -- Count unique outline colors
+    local color_count = 0
+    for _ in pairs(unique_outline_colors) do
+        color_count = color_count + 1
+    end
+        
+    -- If theres only one outline color, give priority to the one in ass overrides
+    -- If theres multiple, conserve since:
+        -- If it contains black, its probably the default font, and the other colors are the ALTs
+        -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
+
+    if color_count <= 1 then
+        return false
+    end
+
+    return true
+end
+
+local function prefix_style_conserve(scaled_style)
+    local all_parts = {}
+    
+    for _, style_info in ipairs(DEFAULT_STYLES) do
+        local style_name = style_info.name
+        local parts = {}
+        
+        -- Parse the scaled_style to get key-value pairs
+        local style_params = {}
+        for param in scaled_style:gmatch("([^,]+)") do
+            local key, value = param:match("^([^=]+)=(.+)$")
+            if key and value then
+                style_params[key] = value
+            end
+        end
+        
+        -- Check if we should preserve colors for this style
+        if style_info.primary_color then
+            style_params.PrimaryColour = style_info.primary_color
+        end
+        if style_info.secondary_color then
+            style_params.SecondaryColour = style_info.secondary_color
+        end
+        if style_info.outline_color then
+            style_params.OutlineColour = style_info.outline_color
+        end
+        if style_info.back_color then
+            style_params.BackColour = style_info.back_color
+        end
+        
+        -- Build the prefixed style
+        for key, value in pairs(style_params) do
+            table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+        end
+        
+        table.insert(all_parts, table.concat(parts, ","))
+    end
+    return table.concat(all_parts, ",")
+end
+
 local function apply_ass_style()
     local style = styles.ass[options.ass_index]
     if not style then return end
@@ -318,16 +415,31 @@ local function apply_ass_style()
     local scale = get_playres_scale()
     local scaled_style = style
 
-    if options.alternate_size and DEFAULT_SIZE ~= nil then
+    if options.alternate_size and #DEFAULT_STYLES > 0 then
         -- Scale it more up/down depending on the alternate font scale
         scale = scale * options.alternate_font_scale
-        scaled_style = scaled_style .. string.format(",FontSize=%d", math.floor((options.alternate_font_scale*DEFAULT_SIZE) + 0.5))
+
+        local first_style = DEFAULT_STYLES[1]
+        if first_style and first_style.size then
+            scaled_style = scaled_style .. string.format(",FontSize=%d", 
+                math.floor((options.alternate_font_scale * tonumber(first_style.size)) + 0.5))
+        end
     end
 
     scaled_style = scale_ass_style(scaled_style, scale)
 
     if #MATCHING_STYLES > 0 then
-        scaled_style = prefix_style_with_styles(MATCHING_STYLES, scaled_style)
+        if options.conserve_style_color then
+            local conserve = should_conserve()
+            
+            if conserve then
+                scaled_style = prefix_style_conserve(scaled_style)
+            else
+                scaled_style = prefix_style(scaled_style)
+            end
+        else
+            scaled_style = prefix_style(scaled_style)
+        end
     end
 
     -- Fix LayoutRes
