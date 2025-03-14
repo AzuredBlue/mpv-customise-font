@@ -3,16 +3,16 @@ local utils = require 'mp.utils'
 local msg = require 'mp.msg'
 local mpoptions = require('mp.options')
 
-DEFAULT_PLAYRESX = 640
-DEFAULT_PLAYRESY = 360
+local DEFAULT_PLAYRESX = 640
+local DEFAULT_PLAYRESY = 360
 
 -- The fonts to be replaced with "only_modify_default_font"
 -- Default meaning the main font used for subtitles
 -- avoiding to replace other fonts, like signs
-DEFAULT_STYLES = {}
-MATCHING_STYLES = {}
-ASS_SUBTITLE = false
-sub_data = nil
+local default_styles = {}
+local matching_styles = {}
+local ass_subtitle = false
+local sub_data = nil
 
 -- All of these options can be modified in the customise_font.conf
 local options = {
@@ -51,8 +51,7 @@ local styles = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
         "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.5",
         "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",
-        -- "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1",
-        -- "FontName=Trebuchet MS,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.8,Shadow=1",
+
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -88,16 +87,6 @@ local styles = {
             shadow_color = "#80000000",
             shadow_offset = 0.9
         },
-        -- {
-        --     name = "CR",
-        --     font = "Trebuchet MS",
-        --     bold = true,
-        --     blur = 0,
-        --     border_color = "#182740",
-        --     border_size = 3,
-        --     shadow_color = "#182740",
-        --     shadow_offset = 1.5
-        -- }
     }
 }
 
@@ -139,21 +128,14 @@ local function get_playres_scale()
 
     local xRatio = playresx / DEFAULT_PLAYRESX
     local yRatio = playresy / DEFAULT_PLAYRESY
-    if xRatio >= yRatio then
-        return xRatio
-    else
-        return yRatio
-    end
+    return (xRatio >= yRatio) and xRatio or yRatio
 end
 
 local function scale_ass_style(style, scale)
     if scale == 1 then return style end
     
     return style:gsub("([%w]+)=([%d%.]+)", function(key, val)
-        local scaled_properties = {
-            Outline = true, Shadow = true
-        }
-        
+        local scaled_properties = { Outline = true, Shadow = true }
         if scaled_properties[key] then
             return string.format("%s=%.1f", key, tonumber(val) * scale)
         end
@@ -288,49 +270,26 @@ local function get_default_font_and_styles()
         return
     end
 
-    DEFAULT_STYLES = styleDetails[chosenKey]
-    MATCHING_STYLES = {}
+    default_styles = styleDetails[chosenKey]
+    matching_styles = {}
     
-    for _, style_info in ipairs(DEFAULT_STYLES) do
-        table.insert(MATCHING_STYLES, style_info.name)
+    for _, style_info in ipairs(default_styles) do
+        table.insert(matching_styles, style_info.name)
     end
 
     if options.debug then
-        local style_list_str = (#MATCHING_STYLES > 0 and table.concat(MATCHING_STYLES, ", ")) or "none"
+        local style_list_str = (#matching_styles > 0 and table.concat(matching_styles, ", ")) or "none"
         print(string.format("Final decision: replacing font '%s' (size %s) used by %d styles: %s",
-            DEFAULT_STYLES[1] and DEFAULT_STYLES[1].font or "nil",
-            DEFAULT_STYLES[1] and DEFAULT_STYLES[1].size or "nil",
-            #MATCHING_STYLES,
+            default_styles[1] and default_styles[1].font or "nil",
+            default_styles[1] and default_styles[1].size or "nil",
+            #matching_styles,
             style_list_str))
     end
 end
 
--- Prefix the style with the style names, so it only changes them.
-local function prefix_style(scaled_style)
-    local all_parts = {}
-    
-    for _, style_name in ipairs(MATCHING_STYLES) do
-        local parts = {}
-        for param in scaled_style:gmatch("([^,]+)") do
-            local key, value = param:match("^([^=]+)=(.+)$")
-            if key and value then
-                table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
-            else
-                table.insert(parts, param)
-            end
-        end
-        table.insert(all_parts, table.concat(parts, ","))
-    end
-    
-    return table.concat(all_parts, ",")
-end
-
 local function should_conserve()
     local unique_outline_colors = {}
-    local has_black = false
-    
-    -- Collect all unique outline colors from styles
-    for _, style_info in ipairs(DEFAULT_STYLES) do
+    for _, style_info in ipairs(default_styles) do
         local outline_color = style_info.outline_color
         
         if outline_color then
@@ -339,61 +298,39 @@ local function should_conserve()
             end
         end
     end
-    
-    -- Count unique outline colors
-    local color_count = 0
-    for _ in pairs(unique_outline_colors) do
-        color_count = color_count + 1
-    end
+
+    local count = 0
+    for _ in pairs(unique_outline_colors) do count = count + 1 end
         
     -- If theres only one outline color, give priority to the one in ass overrides
     -- If theres multiple, conserve, since:
         -- If it contains black, its probably the default font, and the other colors are the ALTs
         -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
 
-    if color_count <= 1 then
-        return false
-    end
-
-    return true
+    return count > 1
 end
 
-local function prefix_style_conserve(scaled_style)
+-- Prefix the style with the style names, so it only changes them.
+local function prefix_style(scaled_style)
     local all_parts = {}
-    
-    for _, style_info in ipairs(DEFAULT_STYLES) do
-        local style_name = style_info.name
+    local conserve = should_conserve()
+    for _, style_name in ipairs(matching_styles) do
         local parts = {}
-        
-        -- Parse the scaled_style to get key-value pairs
-        local style_params = {}
         for param in scaled_style:gmatch("([^,]+)") do
             local key, value = param:match("^([^=]+)=(.+)$")
-            if key and value then
-                style_params[key] = value
-            end
+            if options.conserve_style_color and conserve and key:find("Colour$") then
+                -- Don't include Colour if conserve style color is on
+            else
+                if key and value then
+                    table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+                else
+                    table.insert(parts, param)
+                end
+            end 
         end
-        
-        if style_info.primary_color then
-            style_params.PrimaryColour = style_info.primary_color
-        end
-        if style_info.secondary_color then
-            style_params.SecondaryColour = style_info.secondary_color
-        end
-        if style_info.outline_color then
-            style_params.OutlineColour = style_info.outline_color
-        end
-        if style_info.back_color then
-            style_params.BackColour = style_info.back_color
-        end
-        
-        -- Build the prefixed style
-        for key, value in pairs(style_params) do
-            table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
-        end
-        
         table.insert(all_parts, table.concat(parts, ","))
     end
+    
     return table.concat(all_parts, ",")
 end
 
@@ -405,11 +342,10 @@ local function apply_ass_style()
     local scale = get_playres_scale()
     local scaled_style = style
 
-    if options.alternate_size and #DEFAULT_STYLES > 0 then
-        -- Scale it more up/down depending on the alternate font scale
+    if options.alternate_size and #default_styles > 0 then
         scale = scale * options.alternate_font_scale
 
-        local first_style = DEFAULT_STYLES[1]
+        local first_style = default_styles[1]
         if first_style and first_style.size then
             scaled_style = scaled_style .. string.format(",FontSize=%d", 
                 math.floor((options.alternate_font_scale * tonumber(first_style.size)) + 0.5))
@@ -418,35 +354,19 @@ local function apply_ass_style()
 
     scaled_style = scale_ass_style(scaled_style, scale)
 
-    if #MATCHING_STYLES > 0 then
-        if options.conserve_style_color then
-            local conserve = should_conserve()
-            
-            if conserve then
-                scaled_style = prefix_style_conserve(scaled_style)
-            else
-                scaled_style = prefix_style(scaled_style)
-            end
-        else
-            scaled_style = prefix_style(scaled_style)
-        end
+    if #matching_styles > 0 then
+        scaled_style = prefix_style(scaled_style)
     end
-
-    -- Fix LayoutRes
-    -- Instead, use sub-ass-use-video-data=aspect-ratio 
     
     mp.set_property("sub-ass-style-overrides", scaled_style)
     
-    if options.set_sub_pos then
-        mp.set_property("sub-pos", 98)
-    end
+    if options.set_sub_pos then mp.set_property("sub-pos", 98) end
 end
 
 local function apply_non_ass_style()
     local style = styles.non_ass[options.non_ass_index]
     if not style then return end
 
-    -- Scale font size based on alternate_size
     font_size = options.default_font_size
     if options.alternate_size then
         font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
@@ -461,10 +381,7 @@ local function apply_non_ass_style()
     mp.set_property_native("sub-shadow-color", style.shadow_color)
     mp.set_property_native("sub-shadow-offset", style.shadow_offset)
 
-    if options.set_sub_pos then
-        mp.set_property("sub-pos", 98)
-    end
-    
+    if options.set_sub_pos then mp.set_property("sub-pos", 98) end
 end
 
 local function save_config()    
@@ -506,12 +423,12 @@ local function save_config()
 end
 
 local function is_ass_subtitle()
-    if ASS_SUBTITLE == nil then
+    if ass_subtitle == nil then
         local track = mp.get_property_native("current-tracks/sub")
-        ASS_SUBTITLE = track and track.codec == "ass"
+        ass_subtitle = track and track.codec == "ass"
     end
 
-    return ASS_SUBTITLE
+    return ass_subtitle
 end
 
 local function toggle_font_size()
@@ -541,7 +458,7 @@ end
 
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
-    ASS_SUBTITLE = nil
+    ass_subtitle = nil
     if is_ass_subtitle() then
         if options.debug then
             print("Detected change in subtitle tracks!")
