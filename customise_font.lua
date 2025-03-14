@@ -11,6 +11,7 @@ DEFAULT_PLAYRESY = 360
 -- avoiding to replace other fonts, like signs
 DEFAULT_STYLES = {}
 MATCHING_STYLES = {}
+ASS_SUBTITLE = false
 sub_data = nil
 
 -- All of these options can be modified in the customise_font.conf
@@ -128,21 +129,6 @@ local function get_config_path()
     return nil
 end
 
-local function ensure_config_directory()
-    local config_path = get_config_path()
-    if not config_path then return false end
-    
-    local success, err = utils.file_info(config_path)
-    if not success then
-        msg.verbose("Creating config directory:", config_path)
-        return utils.subprocess({
-            args = {"mkdir", "-p", config_path},
-            cancellable = false
-        })
-    end
-    return true
-end
-
 local function get_playres_scale()
     if sub_data == "" then
         return 1.0
@@ -211,6 +197,7 @@ local function get_default_font_and_styles()
     local orderKeys = {}
     local max_count = 0
 
+    print("Fonts guessing from:")
     for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
         local params = {}
         for param in style_line:gmatch("([^,]+)") do
@@ -262,11 +249,15 @@ local function get_default_font_and_styles()
 
     -- Choose the key to replace
     local chosenKey, firstTiedKey = nil, nil
+    
+    -- Choose the most common key
     for _, key in ipairs(orderKeys) do
         if freq[key] == max_count then
             if not firstTiedKey then
                 firstTiedKey = key
             end
+
+            -- Try to see if any key is in the whitelist and choose it instead
             for _, style_info in ipairs(styleDetails[key]) do
                 if matches_whitelist(style_info.name) then
                     chosenKey = key
@@ -282,7 +273,7 @@ local function get_default_font_and_styles()
     if not chosenKey then
         chosenKey = firstTiedKey
         if options.debug and chosenKey ~= nil then
-            print("Chosen key was " .. chosenKey .. " because it was the first tied key in the file")
+            print("Chosen key was " .. chosenKey .. " because it was the most common.")
         end
     end
 
@@ -356,7 +347,7 @@ local function should_conserve()
     end
         
     -- If theres only one outline color, give priority to the one in ass overrides
-    -- If theres multiple, conserve since:
+    -- If theres multiple, conserve, since:
         -- If it contains black, its probably the default font, and the other colors are the ALTs
         -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
 
@@ -383,7 +374,6 @@ local function prefix_style_conserve(scaled_style)
             end
         end
         
-        -- Check if we should preserve colors for this style
         if style_info.primary_color then
             style_params.PrimaryColour = style_info.primary_color
         end
@@ -443,7 +433,7 @@ local function apply_ass_style()
     end
 
     -- Fix LayoutRes
-    -- Instead use sub-ass-use-video-data=aspect-ratio 
+    -- Instead, use sub-ass-use-video-data=aspect-ratio 
     
     mp.set_property("sub-ass-style-overrides", scaled_style)
     
@@ -477,10 +467,9 @@ local function apply_non_ass_style()
     
 end
 
-local function save_config()
-    if not ensure_config_directory() then return end
-    
+local function save_config()    
     local config_path = utils.join_path(get_config_path(), "customise_font.conf")
+
     local dynamic = {
         ass_index = options.ass_index,
         non_ass_index = options.non_ass_index,
@@ -509,7 +498,6 @@ local function save_config()
         end
     end
 
-    -- Write updated content
     file = io.open(config_path, "w")
     if file then
         file:write(table.concat(lines, "\n"))
@@ -518,8 +506,12 @@ local function save_config()
 end
 
 local function is_ass_subtitle()
-    local track = mp.get_property_native("current-tracks/sub")
-    return track and track.codec == "ass"
+    if ASS_SUBTITLE == nil then
+        local track = mp.get_property_native("current-tracks/sub")
+        ASS_SUBTITLE = track and track.codec == "ass"
+    end
+
+    return ASS_SUBTITLE
 end
 
 local function toggle_font_size()
@@ -549,6 +541,7 @@ end
 
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
+    ASS_SUBTITLE = nil
     if is_ass_subtitle() then
         if options.debug then
             print("Detected change in subtitle tracks!")
