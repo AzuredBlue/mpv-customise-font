@@ -22,6 +22,9 @@ local options = {
     set_sub_pos = true,
     -- If it should only try to modify the font used for subtitles, instead of all
     only_modify_default_font = true,
+    -- If not nil, it will override the ass font size with this value, multiplied by the scale factor
+    -- from PlayResX. I would recommend around ~26
+    ass_font_size = 0,
 
     -- If it should try to conserve the colors of the original fonts
     -- If your style doesnt set the colours, it will conserve the originals
@@ -29,7 +32,7 @@ local options = {
     -- 1 font with different colors
     conserve_style_color = true,
 
-    -- Font sizes for SRT. 44 seems to be the best for me.
+    -- Font sizes for SRT. 44-48 seems to be the best for me.
     -- Scale is the value the default font size is multiplied by
     -- when alternate_size is on. I recommend values 0.9 - 1.1
     default_font_size = 44,
@@ -49,7 +52,7 @@ local styles = {
     -- ASS Styles:
     ass = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00402718,BackColour=&H00402718,Outline=1.2,Shadow=0.5",
+        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00091A04,BackColour=&H00091A04,Outline=1.2,Shadow=0.5",
         "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",
 
         -- I recommend leaving this here, so you can always cycle back to default
@@ -68,13 +71,13 @@ local styles = {
             shadow_offset = 0
         },
         {
-            name = "Gandhi Style Blue",
+            name = "Gandhi Style Alt",
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
-            border_color = "#80182740",
+            border_color = "#041A09",
             border_size = 2.1,
-            shadow_color = "#80182740",
+            shadow_color = "#80041A09",
             shadow_offset = 0.9
         },
         {
@@ -177,6 +180,7 @@ local function get_default_font_and_styles()
     local freq = {}
     local styleDetails = {}
     local orderKeys = {}
+    local max_freq = 0
     local max_count = 0
 
     print("Fonts guessing from:")
@@ -197,8 +201,12 @@ local function get_default_font_and_styles()
                     table.insert(orderKeys, key)
                 end
                 freq[key] = freq[key] + 1
-                if freq[key] > max_count then
-                    max_count = freq[key]
+
+                if freq[key] > max_freq then
+                    max_freq = freq[key]
+                    max_count = 1
+                elseif freq[key] == max_freq then
+                    max_count = max_count + 1
                 end
 
                 styleDetails[key] = styleDetails[key] or {}
@@ -234,19 +242,22 @@ local function get_default_font_and_styles()
     
     -- Choose the most common key
     for _, key in ipairs(orderKeys) do
-        if freq[key] == max_count then
+        if freq[key] == max_freq then
+            -- Choose from the ones that are the most common
             if not firstTiedKey then
                 firstTiedKey = key
             end
-
-            -- Try to see if any key is in the whitelist and choose it instead
-            for _, style_info in ipairs(styleDetails[key]) do
-                if matches_whitelist(style_info.name) then
-                    chosenKey = key
-                    if options.debug then
-                        print("Chosen key was " .. key .. " because it matched the whitelist")
+            -- If theres more than 1 key tied in first place
+            if max_count > 1 then
+                -- Try to match it to the whitelist to decide
+                for _, style_info in ipairs(styleDetails[key]) do
+                    if matches_whitelist(style_info.name) then
+                        chosenKey = key
+                        if options.debug then
+                            print("Chosen key was " .. key .. " because it matched the whitelist")
+                        end
+                        break
                     end
-                    break
                 end
             end
             if chosenKey then break end
@@ -314,6 +325,11 @@ end
 local function prefix_style(scaled_style)
     local all_parts = {}
     local conserve = should_conserve()
+
+    if conserve and options.conserve_style_color and options.debug then
+        print("More than 1 color detected in the font! Conserving colors.")
+    end
+
     for _, style_name in ipairs(matching_styles) do
         local parts = {}
         for param in scaled_style:gmatch("([^,]+)") do
@@ -341,15 +357,32 @@ local function apply_ass_style()
     -- Scale the style based on the PlayRes
     local scale = get_playres_scale()
     local scaled_style = style
-
+    print(options.ass_font_size)
     if options.alternate_size and #default_styles > 0 then
         scale = scale * options.alternate_font_scale
 
         local first_style = default_styles[1]
-        if first_style and first_style.size then
-            scaled_style = scaled_style .. string.format(",FontSize=%d", 
-                math.floor((options.alternate_font_scale * tonumber(first_style.size)) + 0.5))
+        if first_style then
+
+            local size = first_style.size
+            if options.ass_font_size ~= 0 then
+                size = options.ass_font_size * scale
+            end
+
+            if size then
+                size = math.floor((options.alternate_font_scale * tonumber(size)) + 0.5)
+                scaled_style = scaled_style .. string.format(",FontSize=%d", size)
+            end
+
         end
+    else
+
+        -- Override also if not on alternate size
+        if options.ass_font_size ~= 0 then
+            size = tonumber(options.ass_font_size * scale)
+            scaled_style = scaled_style .. string.format(",FontSize=%d", size)
+        end
+
     end
 
     scaled_style = scale_ass_style(scaled_style, scale)
