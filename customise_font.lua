@@ -326,9 +326,9 @@ local function prefix_style(scaled_style)
     local all_parts = {}
     local conserve = should_conserve()
 
-    if conserve and options.conserve_style_color and options.debug then
-        print("More than 1 color detected in the font! Conserving colors.")
-    end
+    -- if conserve and options.conserve_style_color and options.debug then
+    --     print("More than 1 color detected in the font! Conserving colors.")
+    -- end
 
     for _, style_name in ipairs(matching_styles) do
         local parts = {}
@@ -357,7 +357,7 @@ local function apply_ass_style()
     -- Scale the style based on the PlayRes
     local scale = get_playres_scale()
     local scaled_style = style
-    print(options.ass_font_size)
+
     if options.alternate_size and #default_styles > 0 then
         scale = scale * options.alternate_font_scale
 
