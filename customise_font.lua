@@ -52,7 +52,8 @@ local styles = {
     -- ASS Styles:
     ass = {
         "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-        "FontName=Gandhi Sans,Bold=1,OutlineColour=&H00091A04,BackColour=&H00091A04,Outline=1.2,Shadow=0.5",
+        --"FontName=Gandhi Sans,Bold=1,OutlineColour=&H00091A04,BackColour=&H00091A04,Outline=1.2,Shadow=0.5",
+        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.5",
         "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",
 
         -- I recommend leaving this here, so you can always cycle back to default
@@ -75,9 +76,9 @@ local styles = {
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
-            border_color = "#041A09",
+            -- border_color = "#041A09",
             border_size = 2.1,
-            shadow_color = "#80041A09",
+            -- shadow_color = "#80041A09",
             shadow_offset = 0.9
         },
         {
@@ -405,14 +406,12 @@ local function apply_non_ass_style()
         font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
     end
 
-    mp.set_property_native("sub-font", style.font)
-    mp.set_property_native("sub-bold", style.bold)
-    mp.set_property_native("sub-font-size", font_size)
-    mp.set_property_native("sub-blur", style.blur)
-    mp.set_property_native("sub-border-color", style.border_color)
-    mp.set_property_native("sub-border-size", style.border_size)
-    mp.set_property_native("sub-shadow-color", style.shadow_color)
-    mp.set_property_native("sub-shadow-offset", style.shadow_offset)
+    for key, value in pairs(style) do
+        if key ~= "name" then
+            local mpv_property_name = "sub-" .. string.gsub(key, "_", "-")
+            mp.set_property_native(mpv_property_name, value)
+        end
+    end
 
     if options.set_sub_pos then mp.set_property("sub-pos", 98) end
 end
@@ -473,7 +472,6 @@ local function toggle_font_size()
         apply_non_ass_style()
         mp.osd_message("SRT Font Size: " .. (options.alternate_size and "Alt" or "Normal"), 2)
     end
-    save_config()
 end
 
 local function cycle_styles(direction)
@@ -486,7 +484,6 @@ local function cycle_styles(direction)
         apply_non_ass_style()
         mp.osd_message("SRT Style: " .. styles.non_ass[options.non_ass_index].name, 2)
     end
-    save_config()
 end
 
 -- Change default font when the subtitles are changed
@@ -504,6 +501,11 @@ mp.observe_property("current-tracks/sub", "native", function(name, value)
     end
 end
 )
+
+-- Save config on shutdown
+mp.register_event("shutdown", function()
+    save_config()
+end)
 
 -- Key Bindings
 mp.add_key_binding("k", "cycle_styles_forward", function() cycle_styles(1) end)
