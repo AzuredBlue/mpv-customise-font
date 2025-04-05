@@ -406,6 +406,8 @@ local function apply_non_ass_style()
         font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
     end
 
+    mp.set_property_native("sub-font-size", font_size)
+
     for key, value in pairs(style) do
         if key ~= "name" then
             local mpv_property_name = "sub-" .. string.gsub(key, "_", "-")
