@@ -43,43 +43,57 @@ local options = {
     ass_index = 1,
     non_ass_index = 1,
     alternate_size = false,
+
+    -- Blacklist these from being guessed as the default value
+    -- blacklist = { "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening"}
+    blacklist = "sign;song;^ed;^op;title;^os;ending;opening"
 }
 
 mpoptions.read_options(options, "customise_font")
+
+if type(options.blacklist) == "string" and options.blacklist ~= "" then
+    local dirs = {}
+    for dir in string.gmatch(options.blacklist, "([^,;]+)") do
+        table.insert(dirs, (dir:gsub("^%s*(.-)%s*$", "%1"):gsub('[\'"]', '')))
+    end
+    options.blacklist = dirs
+elseif type(options.blacklist) == "string" then
+    options.blacklist = {}
+end
 
 -- Add your own styles here 
 local styles = {
     -- ASS Styles:
     ass = {
-        "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
-        --"FontName=Gandhi Sans,Bold=1,OutlineColour=&H00091A04,BackColour=&H00091A04,Outline=1.2,Shadow=0.5",
-        "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.5",
-        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",
-
+        "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.25,Shadow=0.5",
+        "FontName=Cronos Pro,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.2,Shadow=0",
+        -- "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00F1F4F9,SecondaryColour=&H000000FF,OutlineColour=&H000A162D,BackColour=&HBE000000,Outline=1.25,Shadow=0.5",
+        "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.45,Shadow=0.75",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",        
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
     -- Other styles, such as SRT:
     non_ass = {
         {
-            name = "Netflix Style",
-            font = "Netflix Sans", 
-            bold = true,
-            blur = 3,
+            name = "LTFinnegan",
+            font = "LTFinnegan Medium",
+            bold = false,
+            blur = 0,
             border_color = "#000000",
-            border_size = 2,
-            shadow_color = "#000000",
-            shadow_offset = 0
+            border_size = 2.1,
+            shadow_color = "#80000000",
+            shadow_offset = 0.9
         },
         {
-            name = "Gandhi Style Alt",
-            font = "Gandhi Sans",
+            name = "Noto Serif",
+            font = "Noto Serif", 
             bold = true,
             blur = 0,
-            -- border_color = "#041A09",
-            border_size = 2.1,
-            -- shadow_color = "#80041A09",
-            shadow_offset = 0.9
+            border_color = "#000000",
+            border_size = 3.6,
+            shadow_color = "#80000000",
+            shadow_offset = 1.1
         },
         {
             name = "Gandhi Style",
@@ -152,11 +166,16 @@ local function get_default_font_and_styles()
     if not options.only_modify_default_font then return end
     if not sub_data or not sub_data:find("Styles%]") then return end
 
-    local blacklist = { "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening" }
+    local blacklist = options.blacklist
     local whitelist = { "default" }
 
     local function matches_blacklist(name)
         local lower = name:lower()
+        -- Also match OP and ED capitalised
+        if name:find("OP") or name:find("ED") then
+            return true
+        end
+
         for _, pat in ipairs(blacklist) do
             if lower:find(pat) then
                 -- if options.debug then
@@ -391,7 +410,20 @@ local function apply_ass_style()
     if #matching_styles > 0 then
         scaled_style = prefix_style(scaled_style)
     end
-    
+
+    -- local aspect_ratio = mp.get_property("video-params/aspect-name")
+    -- Doesnt work since it can be nil when launching, width and height cant be nil
+    local w = mp.get_property("video-params/w", 1920)
+    local h = mp.get_property("video-params/h", 1080)
+    local dar = w / h
+    local dar_r = math.floor(dar * 100 + 0.5) / 100
+    local aspect_ratio = string.format("%.2f:1", dar_r)
+
+    -- Fallback LayoutRes if not in 16:9 (can mess up subtitles)
+    if aspect_ratio ~= "1.78:1" then
+        scaled_style = scaled_style .. ",LayoutResX=0,LayoutResY=0"
+    end
+
     mp.set_property("sub-ass-style-overrides", scaled_style)
     
     if options.set_sub_pos then mp.set_property("sub-pos", 98) end
