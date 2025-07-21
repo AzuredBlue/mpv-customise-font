@@ -65,11 +65,14 @@ end
 local styles = {
     -- ASS Styles:
     ass = {
-        "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.25,Shadow=0.5",
-        "FontName=Cronos Pro,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.2,Shadow=0",
+        "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1,Shadow=0.23,MarginV=20",
+        --"FontName=LTFinnegan Medium,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Trebuchet MS,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=2,Shadow=1",
         -- "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00F1F4F9,SecondaryColour=&H000000FF,OutlineColour=&H000A162D,BackColour=&HBE000000,Outline=1.25,Shadow=0.5",
-        "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.45,Shadow=0.75",
-        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5",        
+        -- "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.45,Shadow=0.73",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
+        "FontName=Cronos Pro,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.2,Shadow=0,MarginV=20",
+        "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H0012291F,BackColour=&HA012291F,Outline=1.45,Shadow=0.73,MarginV=20",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -108,32 +111,20 @@ local styles = {
     }
 }
 
+local script_dir = (debug.getinfo(1).source:match("@?(.*/)") or "./")
+
+local script_opts_dir = script_dir:match("^(.-)[/\\]scripts[/\\]")
+
+if script_opts_dir then
+    script_opts_dir = utils.join_path(script_opts_dir, "script-opts")
+else
+    script_opts_dir = os.getenv("APPDATA") and utils.join_path(utils.join_path(os.getenv("APPDATA"), "mpv"), "script-opts") or
+                          os.getenv("HOME") and utils.join_path(utils.join_path(utils.join_path(os.getenv("HOME"), ".config"), "mpv"), "script-opts") or
+                          nil
+end
+
 local function get_config_path()
-    if package.config:sub(1,1) == '\\' then
-        -- Windows path
-        local appdata = os.getenv("APPDATA")
-        if appdata then
-            return utils.join_path(utils.join_path(appdata, "mpv"), "script-opts")
-        else
-            local home = os.getenv("USERPROFILE")
-            if home then
-                return utils.join_path(
-                    utils.join_path(
-                        utils.join_path(
-                            utils.join_path(home, "AppData"),
-                        "Roaming"),
-                    "mpv"),
-                "script-opts")
-            end
-        end
-    else
-        -- Unix path
-        local home = os.getenv("HOME")
-        if home then
-            return utils.join_path(utils.join_path(home, ".config"), "mpv")
-        end
-    end
-    return nil
+    return script_opts_dir
 end
 
 local function get_playres_scale()
@@ -153,7 +144,7 @@ local function scale_ass_style(style, scale)
     if scale == 1 then return style end
     
     return style:gsub("([%w]+)=([%d%.]+)", function(key, val)
-        local scaled_properties = { Outline = true, Shadow = true }
+        local scaled_properties = { Outline = true, Shadow = true, MarginV = true }
         if scaled_properties[key] then
             return string.format("%s=%.1f", key, tonumber(val) * scale)
         end
@@ -202,8 +193,9 @@ local function get_default_font_and_styles()
     local orderKeys = {}
     local max_freq = 0
     local max_count = 0
-
-    print("Fonts guessing from:")
+    if options.debug then
+        print("Fonts guessing from:")
+    end
     for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
         local params = {}
         for param in style_line:gmatch("([^,]+)") do
