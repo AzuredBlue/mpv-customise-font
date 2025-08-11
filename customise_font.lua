@@ -46,7 +46,7 @@ local options = {
 
     -- Blacklist these from being guessed as the default value
     -- blacklist = { "sign", "song", "^ed", "^op", "title", "^os", "ending", "opening"}
-    blacklist = "sign;song;^ed;^op;title;^os;ending;opening"
+    blacklist = "sign;song;^ed;^op;title;^os;ending;opening;kfx;karaoke;eyecatch"
 }
 
 mpoptions.read_options(options, "customise_font")
@@ -65,14 +65,13 @@ end
 local styles = {
     -- ASS Styles:
     ass = {
+        --"FontName=Trebuchet MS,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=2,Shadow=1",
+        -- "FontName=Cabin,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
+        "FontName=Netflix Sans Medium,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
         "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1,Shadow=0.23,MarginV=20",
-        --"FontName=LTFinnegan Medium,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
-        -- "FontName=Trebuchet MS,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=2,Shadow=1",
-        -- "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00F1F4F9,SecondaryColour=&H000000FF,OutlineColour=&H000A162D,BackColour=&HBE000000,Outline=1.25,Shadow=0.5",
-        -- "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.45,Shadow=0.73",
-        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
-        "FontName=Cronos Pro,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1.2,Shadow=0,MarginV=20",
-        "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H0012291F,BackColour=&HA012291F,Outline=1.45,Shadow=0.73,MarginV=20",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.2,Shadow=0.5,MarginV=20",        
+        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.4,Shadow=0.8,MarginV=20",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -89,14 +88,14 @@ local styles = {
             shadow_offset = 0.9
         },
         {
-            name = "Noto Serif",
-            font = "Noto Serif", 
-            bold = true,
+            name = "Netflix Sans",
+            font = "Netflix Sans Medium",
+            bold = false,
             blur = 0,
             border_color = "#000000",
-            border_size = 3.6,
+            border_size = 2.1,
             shadow_color = "#80000000",
-            shadow_offset = 1.1
+            shadow_offset = 0.9
         },
         {
             name = "Gandhi Style",
@@ -108,6 +107,37 @@ local styles = {
             shadow_color = "#80000000",
             shadow_offset = 0.9
         },
+        {
+            name = "Cabin",
+            font = "Cabin",
+            bold = true,
+            blur = 0,
+            border_color = "#000000",
+            border_size = 2.1,
+            shadow_color = "#80000000",
+            shadow_offset = 0.9
+        },
+        {
+            name = "Cronos Pro",
+            font = "Cronos Pro",
+            bold = true,
+            blur = 0,
+            border_color = "#000000",
+            border_size = 2.1,
+            shadow_color = "#80000000",
+            shadow_offset = 0.9
+        },
+        {
+            name = "Noto Serif",
+            font = "Noto Serif", 
+            bold = true,
+            blur = 0,
+            border_color = "#000000",
+            border_size = 3.6,
+            shadow_color = "#80000000",
+            shadow_offset = 1.1
+        },
+
     }
 }
 
@@ -298,6 +328,15 @@ local function get_default_font_and_styles()
     
     for _, style_info in ipairs(default_styles) do
         table.insert(matching_styles, style_info.name)
+        matching_styles[style_info.name] = {
+            name = style_info.name,
+            font = style_info.font,
+            size = tonumber(style_info.size),
+            primary_color = style_info.primary_color,
+            secondary_color = style_info.secondary_color,
+            outline_color = style_info.outline_color,
+            back_color = style_info.back_color
+        }
     end
 
     if options.debug then
@@ -344,20 +383,62 @@ local function prefix_style(scaled_style)
 
     for _, style_name in ipairs(matching_styles) do
         local parts = {}
+        local info = matching_styles[style_name]
         for param in scaled_style:gmatch("([^,]+)") do
             local key, value = param:match("^([^=]+)=(.+)$")
-            if options.conserve_style_color and conserve and key:find("Colour$") then
-                -- Don't include Colour if conserve style color is on
-            else
-                if key and value then
-                    table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+            if key and value then
+                if options.conserve_style_color and conserve and key:find("Colour$") then
+                    local key_lower = key:lower()
+                    local color_field
+                    if key_lower:find("primary") then color_field = "primary_color"
+                    elseif key_lower:find("secondary") then color_field = "secondary_color"
+                    elseif key_lower:find("outline") then color_field = "outline_color"
+                    elseif key_lower:find("back") then color_field = "back_color"
+                    end
+                
+                    local include = false
+                    if info and color_field and info[color_field] then
+                        local colorval = tostring(info[color_field])
+                        local hex = colorval:match("([0-9a-fA-F]+)$")
+                        if hex and #hex >= 6 then
+                            hex = hex:sub(-6):lower()
+                            if hex == "000000" or hex == "ffffff" or hex == "0000ff" then
+                                include = true
+                            end
+                        end
+                    end
+                
+                    if include then
+                        table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+                    end
                 else
-                    table.insert(parts, param)
+                    table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
                 end
-            end 
+            else
+                table.insert(parts, param)
+            end
         end
         table.insert(all_parts, table.concat(parts, ","))
     end
+
+
+    -- for _, style_name in ipairs(matching_styles) do
+    --     local parts = {}
+    --     for param in scaled_style:gmatch("([^,]+)") do
+    --         local key, value = param:match("^([^=]+)=(.+)$")
+    --         if options.conserve_style_color and conserve and key:find("Colour$") then
+    --             -- Don't include Colour if conserve style color is on
+    --             print("Conserving color for " .. style_name .. " with " .. key .. "=" .. value)
+    --         else
+    --             if key and value then
+    --                 table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+    --             else
+    --                 table.insert(parts, param)
+    --             end
+    --         end 
+    --     end
+    --     table.insert(all_parts, table.concat(parts, ","))
+    -- end
     
     return table.concat(all_parts, ",")
 end
@@ -504,7 +585,9 @@ local function cycle_styles(direction)
     if is_ass_subtitle() then
         options.ass_index = (options.ass_index + direction - 1) % #styles.ass + 1
         apply_ass_style()
-        mp.osd_message("ASS Style: " .. options.ass_index, 2)
+        local style_str = styles.ass[options.ass_index]
+        local style_name = style_str:match("FontName=([^,]+)") or "Default"
+        mp.osd_message("ASS Style: " .. style_name .. " (" .. options.ass_index .. ")", 2)
     else
         options.non_ass_index = (options.non_ass_index + direction - 1) % #styles.non_ass + 1
         apply_non_ass_style()
