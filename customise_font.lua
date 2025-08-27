@@ -66,12 +66,15 @@ local styles = {
     -- ASS Styles:
     ass = {
         --"FontName=Trebuchet MS,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=2,Shadow=1",
-        -- "FontName=Cabin,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
-        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
-        "FontName=Netflix Sans Medium,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
+        --"FontName=Cabin,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Netflix Sans Medium,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
         "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1,Shadow=0.23,MarginV=20",
-        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.2,Shadow=0.5,MarginV=20",        
-        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.4,Shadow=0.8,MarginV=20",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
+        "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.4,Shadow=0.8,MarginV=20",
+        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&HC0000000,Outline=1.4,Shadow=0.8,MarginV=20",
+        "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.45,Shadow=0.75,MarginV=20",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
     },
@@ -218,6 +221,10 @@ local function get_default_font_and_styles()
         return false
     end
 
+    -- Avoid small-sized fonts, usually used for signs
+    local scale = get_playres_scale()
+    local minimum_size = math.floor(19 * scale + 0.5)
+
     local freq = {}
     local styleDetails = {}
     local orderKeys = {}
@@ -233,7 +240,7 @@ local function get_default_font_and_styles()
         end
         if #params >= 7 then -- Need at least style name, font name, size, and 4 colors
             local style_name = params[1]
-            if not matches_blacklist(style_name) then
+            if not matches_blacklist(style_name) and tonumber(params[3]) > minimum_size then
                 local font_name = params[2]
                 local font_size = params[3]
                 local key = font_name .. "|" .. font_size
