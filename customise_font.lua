@@ -73,7 +73,9 @@ local styles = {
         -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00211110,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
         -- "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00211110,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=25",        
         "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=25",        
-        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
+        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.2,Shadow=0.5,MarginV=20",        
+        -- "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&HC0000000,Outline=1.4,Shadow=0.8,MarginV=20",
+        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=25",
         "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.45,Shadow=0.75,MarginV=20",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
@@ -467,12 +469,16 @@ local function apply_ass_style()
         if first_style then
 
             local size = first_style.size
-            if options.ass_font_size ~= 0 then
-                size = options.ass_font_size * scale
+            local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
+            
+            if options.ass_font_size ~= 0 or existing_fs then
+                size = existing_fs and tonumber(existing_fs) or options.ass_font_size
+                size = math.floor(size * scale + 0.5)
             end
 
             if size then
                 size = math.floor((options.alternate_font_scale * tonumber(size)) + 0.5)
+                scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
                 scaled_style = scaled_style .. string.format(",FontSize=%d", size)
             end
 
@@ -483,7 +489,6 @@ local function apply_ass_style()
         -- Override also if not on alternate size
         if options.ass_font_size ~= 0 or existing_fs then
             -- If scaled_style already contains a FontSize= value, use that as the base size.
-            local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
             local base_size = existing_fs and tonumber(existing_fs) or options.ass_font_size
             -- Remove any existing FontSize=... to avoid duplication when appending the computed value
             scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
