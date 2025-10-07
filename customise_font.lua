@@ -69,11 +69,11 @@ local styles = {
         --"FontName=Cabin,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
         -- "FontName=Netflix Sans Medium,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
         "FontName=LTFinnegan Medium,Bold=0,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1,Shadow=0.23,MarginV=20",
-        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
-        "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",        
-        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.2,Shadow=0.5,MarginV=20",        
-        -- "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H002B2524,BackColour=&HC0171010,Outline=1.4,Shadow=0.8,MarginV=20",
-        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H000000FF,OutlineColour=&H00000000,BackColour=&HC0000000,Outline=1.4,Shadow=0.8,MarginV=20",
+        "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=23",         
+        -- "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00211110,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",         
+        -- "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00211110,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=25",        
+        "FontName=Product Sans,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20,FontSize=25",        
+        "FontName=Cronos Pro Light,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.2,Shadow=0.5,MarginV=20",
         "FontName=Noto Serif,Bold=1,PrimaryColour=&H00FFFFFF,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,Outline=1.45,Shadow=0.75,MarginV=20",
         -- I recommend leaving this here, so you can always cycle back to default
         ""
@@ -90,32 +90,33 @@ local styles = {
             shadow_color = "#80000000",
             shadow_offset = 0.9
         },
-        {
-            name = "Netflix Sans",
-            font = "Netflix Sans Medium",
-            bold = false,
-            blur = 0,
-            border_color = "#000000",
-            border_size = 2.1,
-            shadow_color = "#80000000",
-            shadow_offset = 0.9
-        },
+        -- {
+        --     name = "Netflix Sans",
+        --     font = "Netflix Sans Medium",
+        --     bold = false,
+        --     blur = 0,
+        --     border_color = "#000000",
+        --     border_size = 2.1,
+        --     shadow_color = "#80000000",
+        --     shadow_offset = 0.9
+        -- },
         {
             name = "Gandhi Style",
             font = "Gandhi Sans",
             bold = true,
             blur = 0,
+            -- border_color = "#101121",
             border_color = "#000000",
             border_size = 2.1,
             shadow_color = "#80000000",
             shadow_offset = 0.9
         },
         {
-            name = "Cabin",
-            font = "Cabin",
+            name = "Product Sans",
+            font = "Product Sans",
             bold = true,
             blur = 0,
-            border_color = "#000000",
+            border_color = "#101121",
             border_size = 2.1,
             shadow_color = "#80000000",
             shadow_offset = 0.9
@@ -223,7 +224,7 @@ local function get_default_font_and_styles()
 
     -- Avoid small-sized fonts, usually used for signs
     local scale = get_playres_scale()
-    local minimum_size = math.floor(19 * scale + 0.5)
+    local minimum_size = math.floor(18 * scale + 0.5)
 
     local freq = {}
     local styleDetails = {}
@@ -240,7 +241,8 @@ local function get_default_font_and_styles()
         end
         if #params >= 7 then -- Need at least style name, font name, size, and 4 colors
             local style_name = params[1]
-            if not matches_blacklist(style_name) and tonumber(params[3]) > minimum_size then
+            local size = tonumber(params[3]) or 999
+            if not matches_blacklist(style_name) and size > minimum_size then
                 local font_name = params[2]
                 local font_size = params[3]
                 local key = font_name .. "|" .. font_size
@@ -477,9 +479,15 @@ local function apply_ass_style()
         end
     else
 
+        local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
         -- Override also if not on alternate size
-        if options.ass_font_size ~= 0 then
-            size = tonumber(options.ass_font_size * scale)
+        if options.ass_font_size ~= 0 or existing_fs then
+            -- If scaled_style already contains a FontSize= value, use that as the base size.
+            local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
+            local base_size = existing_fs and tonumber(existing_fs) or options.ass_font_size
+            -- Remove any existing FontSize=... to avoid duplication when appending the computed value
+            scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
+            local size = math.floor(base_size * scale + 0.5)
             scaled_style = scaled_style .. string.format(",FontSize=%d", size)
         end
 
