@@ -62,7 +62,7 @@ elseif type(options.blacklist) == "string" then
 end
 
 -- Add your own styles here 
-local styles = dofile("styles.lua")
+local styles = require("styles")
 
 local script_dir = (debug.getinfo(1).source:match("@?(.*/)") or "./")
 
@@ -554,7 +554,8 @@ mp.register_event("shutdown", function()
 end)
 
 local function reload()
-    styles = dofile("styles.lua")
+    package.loaded["styles"] = nil
+    styles = require("styles")
     cycle_styles(0)
 end
 
