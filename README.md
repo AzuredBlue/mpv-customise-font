@@ -6,11 +6,11 @@ Saves your changes as well.
 
 ## Installation
 
-Copy the `customise_font.lua` in your scripts folder. Thats about it.
+Git clone the repository inside your scripts folder.
 
 ## Usage
 
-After installing, modify:
+After installing, modify `styles.lua`:
 
 ```lua
         ass = {
@@ -35,6 +35,7 @@ You can change these controls in the script:
 mp.add_key_binding("k", "cycle_styles_forward", function() cycle_styles(1) end)
 mp.add_key_binding("K", "cycle_styles_backward", function() cycle_styles(-1) end)
 mp.add_key_binding("Ctrl+k", "toggle_font_size", toggle_font_size)
+mp.add_key_binding("Ctrl+r", "reload", reload)
 ```
 
 After using, it will generate a `.conf` file in your `script-opts`, to save the changes you make.
