@@ -304,6 +304,37 @@ end
 local function prefix_style(scaled_style)
     local all_parts = {}
     local conserve = should_conserve()
+    -- How dark the outline needs to be to be replaced
+    local DARKNESS_THRESHOLD = 0.03
+
+    local function hex_to_rgb(h)
+        h = h:gsub("^#", "")
+        if #h == 3 then
+            h = h:sub(1,1)..h:sub(1,1)..h:sub(2,2)..h:sub(2,2)..h:sub(3,3)..h:sub(3,3)
+        end
+        h = h:sub(-6)
+        local r = tonumber(h:sub(1,2), 16) or 0
+        local g = tonumber(h:sub(3,4), 16) or 0
+        local b = tonumber(h:sub(5,6), 16) or 0
+        return r, g, b
+    end
+
+    local function srgb_to_linear(c)
+        c = c / 255.0
+        if c <= 0.03928 then
+            return c / 12.92
+        else
+            return ((c + 0.055) / 1.055) ^ 2.4
+        end
+    end
+
+        local function luminance_from_hex(h)
+        local r, g, b = hex_to_rgb(h)
+        local rl = srgb_to_linear(r)
+        local gl = srgb_to_linear(g)
+        local bl = srgb_to_linear(b)
+        return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+    end
 
     -- if conserve and options.conserve_style_color and options.debug then
     --     print("More than 1 color detected in the font! Conserving colors.")
@@ -312,31 +343,35 @@ local function prefix_style(scaled_style)
     for _, style_name in ipairs(matching_styles) do
         local parts = {}
         local info = matching_styles[style_name]
+
         for param in scaled_style:gmatch("([^,]+)") do
             local key, value = param:match("^([^=]+)=(.+)$")
+
             if key and value then
                 if options.conserve_style_color and conserve and key:find("Colour$") then
-                    local key_lower = key:lower()
-                    local color_field
-                    if key_lower:find("primary") then color_field = "primary_color"
-                    elseif key_lower:find("secondary") then color_field = "secondary_color"
-                    elseif key_lower:find("outline") then color_field = "outline_color"
-                    elseif key_lower:find("back") then color_field = "back_color"
-                    end
-                
-                    local include = false
+                    local color_field = key:lower():gsub("colour", "_color")
+                    
+                    -- Decide if the specific color should be modified
+                    local modify = false
                     if info and color_field and info[color_field] then
                         local colorval = tostring(info[color_field])
                         local hex = colorval:match("([0-9a-fA-F]+)$")
+
                         if hex and #hex >= 6 then
                             hex = hex:sub(-6):lower()
-                            if hex == "000000" or hex == "ffffff" or hex == "0000ff" then
-                                include = true
+                            hex = hex:sub(5,6) .. hex:sub(3,4) .. hex:sub(1,2)
+
+                            local lum = luminance_from_hex(hex)
+                            
+                            if ((color_field == "outline_color" or color_field == "back_color") and lum <= DARKNESS_THRESHOLD)
+                                or (color_field == "primary_color" and hex == "ffffff")
+                                or (color_field == "secondary_color" and hex == "ff0000") then
+                                modify = true
                             end
                         end
                     end
-                
-                    if include then
+
+                    if modify then
                         table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
                     end
                 else
@@ -349,25 +384,6 @@ local function prefix_style(scaled_style)
         table.insert(all_parts, table.concat(parts, ","))
     end
 
-
-    -- for _, style_name in ipairs(matching_styles) do
-    --     local parts = {}
-    --     for param in scaled_style:gmatch("([^,]+)") do
-    --         local key, value = param:match("^([^=]+)=(.+)$")
-    --         if options.conserve_style_color and conserve and key:find("Colour$") then
-    --             -- Don't include Colour if conserve style color is on
-    --             print("Conserving color for " .. style_name .. " with " .. key .. "=" .. value)
-    --         else
-    --             if key and value then
-    --                 table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
-    --             else
-    --                 table.insert(parts, param)
-    --             end
-    --         end 
-    --     end
-    --     table.insert(all_parts, table.concat(parts, ","))
-    -- end
-    
     return table.concat(all_parts, ",")
 end
 
