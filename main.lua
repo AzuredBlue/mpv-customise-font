@@ -5,6 +5,7 @@ local mpoptions = require('mp.options')
 
 local DEFAULT_PLAYRESX = 640
 local DEFAULT_PLAYRESY = 360
+local cached_scale = nil
 
 -- The fonts to be replaced with "only_modify_default_font"
 -- Default meaning the main font used for subtitles
@@ -81,16 +82,14 @@ local function get_config_path()
 end
 
 local function get_playres_scale()
-    if sub_data == "" then
-        return 1.0
-    end
+    if cached_scale then return cached_scale end
+    if sub_data == "" then return 1.0 end
 
     local playresx = tonumber(sub_data:match("PlayResX:%s*(%d+)")) or DEFAULT_PLAYRESX
     local playresy = tonumber(sub_data:match("PlayResY:%s*(%d+)")) or DEFAULT_PLAYRESY
 
-    local xRatio = playresx / DEFAULT_PLAYRESX
-    local yRatio = playresy / DEFAULT_PLAYRESY
-    return (xRatio >= yRatio) and xRatio or yRatio
+    cached_scale = math.max(playresx / DEFAULT_PLAYRESX, playresy / DEFAULT_PLAYRESY)
+    return cached_scale
 end
 
 local function scale_ass_style(style, scale)
@@ -551,6 +550,7 @@ end
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
     ass_subtitle = nil
+    cached_scale = nil
     if is_ass_subtitle() then
         if options.debug then
             print("Detected change in subtitle tracks!")
