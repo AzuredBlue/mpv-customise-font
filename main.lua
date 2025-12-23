@@ -15,6 +15,10 @@ local matching_styles = {}
 local ass_subtitle = false
 local sub_data = nil
 
+-- Script replaces sub-ass-style-override, if there were any other overrides in conf
+-- save them for "Default"
+local existing_sub_style = nil;
+
 -- All of these options can be modified in the customise_font.conf
 local options = {
     -- Show which fonts are being replaced
@@ -62,7 +66,7 @@ elseif type(options.blacklist) == "string" then
     options.blacklist = {}
 end
 
--- Add your own styles here 
+-- Add your own styles here
 local styles = require("styles")
 
 local script_dir = (debug.getinfo(1).source:match("@?(.*/)") or "./")
@@ -72,9 +76,11 @@ local script_opts_dir = script_dir:match("^(.-)[/\\]scripts[/\\]")
 if script_opts_dir then
     script_opts_dir = utils.join_path(script_opts_dir, "script-opts")
 else
-    script_opts_dir = os.getenv("APPDATA") and utils.join_path(utils.join_path(os.getenv("APPDATA"), "mpv"), "script-opts") or
-                          os.getenv("HOME") and utils.join_path(utils.join_path(utils.join_path(os.getenv("HOME"), ".config"), "mpv"), "script-opts") or
-                          nil
+    script_opts_dir = os.getenv("APPDATA") and
+        utils.join_path(utils.join_path(os.getenv("APPDATA"), "mpv"), "script-opts") or
+        os.getenv("HOME") and
+        utils.join_path(utils.join_path(utils.join_path(os.getenv("HOME"), ".config"), "mpv"), "script-opts") or
+        nil
 end
 
 local function get_config_path()
@@ -94,7 +100,7 @@ end
 
 local function scale_ass_style(style, scale)
     if scale == 1 then return style end
-    
+
     return style:gsub("([%w]+)=([%d%.]+)", function(key, val)
         local scaled_properties = { Outline = true, Shadow = true, MarginV = true }
         if scaled_properties[key] then
@@ -164,7 +170,7 @@ local function get_default_font_and_styles()
                 local font_name = params[2]
                 local font_size = params[3]
                 local key = font_name .. "|" .. font_size
-                
+
                 if not freq[key] then
                     freq[key] = 0
                     table.insert(orderKeys, key)
@@ -189,10 +195,10 @@ local function get_default_font_and_styles()
                     back_color = params[7]
                 }
                 table.insert(styleDetails[key], style_info)
-                
+
                 if options.debug then
-                    print(string.format("Style: %s - %s, %s, %s, %s, %s, %s", 
-                        style_name, font_name, font_size, 
+                    print(string.format("Style: %s - %s, %s, %s, %s, %s, %s",
+                        style_name, font_name, font_size,
                         params[4], params[5], params[6], params[7]))
                 end
             end
@@ -208,7 +214,7 @@ local function get_default_font_and_styles()
 
     -- Choose the key to replace
     local chosenKey, firstTiedKey = nil, nil
-    
+
     -- Choose the most common key
     for _, key in ipairs(orderKeys) do
         if freq[key] == max_freq then
@@ -252,7 +258,7 @@ local function get_default_font_and_styles()
 
     default_styles = styleDetails[chosenKey]
     matching_styles = {}
-    
+
     for _, style_info in ipairs(default_styles) do
         table.insert(matching_styles, style_info.name)
         matching_styles[style_info.name] = {
@@ -280,7 +286,7 @@ local function should_conserve()
     local unique_outline_colors = {}
     for _, style_info in ipairs(default_styles) do
         local outline_color = style_info.outline_color
-        
+
         if outline_color then
             if not unique_outline_colors[outline_color] then
                 unique_outline_colors[outline_color] = true
@@ -290,11 +296,11 @@ local function should_conserve()
 
     local count = 0
     for _ in pairs(unique_outline_colors) do count = count + 1 end
-        
+
     -- If theres only one outline color, give priority to the one in ass overrides
     -- If theres multiple, conserve, since:
-        -- If it contains black, its probably the default font, and the other colors are the ALTs
-        -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
+    -- If it contains black, its probably the default font, and the other colors are the ALTs
+    -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
 
     return count > 1
 end
@@ -309,12 +315,12 @@ local function prefix_style(scaled_style)
     local function hex_to_rgb(h)
         h = h:gsub("^#", "")
         if #h == 3 then
-            h = h:sub(1,1)..h:sub(1,1)..h:sub(2,2)..h:sub(2,2)..h:sub(3,3)..h:sub(3,3)
+            h = h:sub(1, 1) .. h:sub(1, 1) .. h:sub(2, 2) .. h:sub(2, 2) .. h:sub(3, 3) .. h:sub(3, 3)
         end
         h = h:sub(-6)
-        local r = tonumber(h:sub(1,2), 16) or 0
-        local g = tonumber(h:sub(3,4), 16) or 0
-        local b = tonumber(h:sub(5,6), 16) or 0
+        local r = tonumber(h:sub(1, 2), 16) or 0
+        local g = tonumber(h:sub(3, 4), 16) or 0
+        local b = tonumber(h:sub(5, 6), 16) or 0
         return r, g, b
     end
 
@@ -327,7 +333,7 @@ local function prefix_style(scaled_style)
         end
     end
 
-        local function luminance_from_hex(h)
+    local function luminance_from_hex(h)
         local r, g, b = hex_to_rgb(h)
         local rl = srgb_to_linear(r)
         local gl = srgb_to_linear(g)
@@ -349,7 +355,7 @@ local function prefix_style(scaled_style)
             if key and value then
                 if options.conserve_style_color and conserve and key:find("Colour$") then
                     local color_field = key:lower():gsub("colour", "_color")
-                    
+
                     -- Decide if the specific color should be modified
                     local modify = false
                     if info and color_field and info[color_field] then
@@ -358,10 +364,10 @@ local function prefix_style(scaled_style)
 
                         if hex and #hex >= 6 then
                             hex = hex:sub(-6):lower()
-                            hex = hex:sub(5,6) .. hex:sub(3,4) .. hex:sub(1,2)
+                            hex = hex:sub(5, 6) .. hex:sub(3, 4) .. hex:sub(1, 2)
 
                             local lum = luminance_from_hex(hex)
-                            
+
                             if ((color_field == "outline_color" or color_field == "back_color") and lum <= DARKNESS_THRESHOLD)
                                 or (color_field == "primary_color" and hex == "ffffff")
                                 or (color_field == "secondary_color" and hex == "ff0000") then
@@ -389,7 +395,13 @@ end
 local function apply_ass_style()
     local style = styles.ass[options.ass_index]
     if not style then return end
-    
+
+    -- If its the "Default" style, use the user's mpv.conf style
+    if style == "" and existing_sub_style ~= nil then
+        mp.set_property("sub-ass-style-overrides", existing_sub_style)
+        return
+    end
+
     -- Scale the style based on the PlayRes
     local scale = get_playres_scale()
     local scaled_style = style
@@ -399,10 +411,9 @@ local function apply_ass_style()
 
         local first_style = default_styles[1]
         if first_style then
-
             local size = first_style.size
             local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
-            
+
             if options.ass_font_size ~= 0 or existing_fs then
                 size = existing_fs and tonumber(existing_fs) or options.ass_font_size
                 size = math.floor(size * scale + 0.5)
@@ -413,10 +424,8 @@ local function apply_ass_style()
                 scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
                 scaled_style = scaled_style .. string.format(",FontSize=%d", size)
             end
-
         end
     else
-
         local existing_fs = scaled_style:match("FontSize=([%d%.]+)")
         -- Override also if not on alternate size
         if options.ass_font_size ~= 0 or existing_fs then
@@ -427,7 +436,6 @@ local function apply_ass_style()
             local size = math.floor(base_size * scale + 0.5)
             scaled_style = scaled_style .. string.format(",FontSize=%d", size)
         end
-
     end
 
     scaled_style = scale_ass_style(scaled_style, scale)
@@ -450,7 +458,7 @@ local function apply_ass_style()
     end
 
     mp.set_property("sub-ass-style-overrides", scaled_style)
-    
+
     if options.set_sub_pos then mp.set_property("sub-pos", 98) end
 end
 
@@ -475,7 +483,7 @@ local function apply_non_ass_style()
     if options.set_sub_pos then mp.set_property("sub-pos", 98) end
 end
 
-local function save_config()    
+local function save_config()
     local config_path = utils.join_path(get_config_path(), "customise_font.conf")
 
     local dynamic = {
@@ -549,6 +557,10 @@ end
 
 -- Change default font when the subtitles are changed
 mp.observe_property("current-tracks/sub", "native", function(name, value)
+    if existing_sub_style == nil then
+        existing_sub_style = mp.get_property("sub-ass-style-overrides");
+    end
+
     ass_subtitle = nil
     cached_scale = nil
     if is_ass_subtitle() then
