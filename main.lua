@@ -15,6 +15,17 @@ local matching_styles = {}
 local ass_subtitle = false
 local sub_data = nil
 
+local style_combinations = 0
+
+local abort_handle = nil
+
+-- Forward declarations
+local parsed_style_map = nil
+local apply_ass_style = nil
+local prefix_style = nil
+local should_conserve = nil
+
+
 -- Script replaces sub-ass-style-override, if there were any other overrides in conf
 -- save them for "Default"
 local existing_sub_style = nil;
@@ -87,6 +98,12 @@ local function get_config_path()
     return script_opts_dir
 end
 
+local function printDebug(...)
+    if options.debug then
+        print(...)
+    end
+end
+
 local function get_playres_scale()
     if cached_scale then return cached_scale end
     if sub_data == "" then return 1.0 end
@@ -111,30 +128,57 @@ local function scale_ass_style(style, scale)
 end
 
 -- Try to get the 'most popular one'
-local function get_default_font_and_styles()
+local function matches_blacklist(name)
+    local lower = name:lower()
+    -- Also match OP and ED capitalised
+    if name:find("OP") or name:find("ED") then
+        return true
+    end
+
+    if type(options.blacklist) == "table" then
+        for _, pat in ipairs(options.blacklist) do
+            if lower:find(pat) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Parse the styles from the subtitle
+local function build_style_map()
+    if parsed_style_map then return end
+    parsed_style_map = {}
+    
+    if not sub_data then return end
+
+    for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
+        local params = {}
+        for param in style_line:gmatch("([^,]+)") do
+            table.insert(params, param:match("^%s*(.-)%s*$"))
+        end
+        if #params >= 7 then
+            local name = params[1]
+            local fontname = params[2]
+            local fontsize = params[3]
+            parsed_style_map[name] = { 
+                font = fontname, 
+                size = tonumber(fontsize) or 0,
+                primary_color = params[4],
+                secondary_color = params[5],
+                outline_color = params[6],
+                back_color = params[7]
+            }
+        end
+    end
+end
+
+local function guess_font_from_metadata()
     if not options.only_modify_default_font then return end
     if not sub_data or not sub_data:find("Styles%]") then return end
 
     local blacklist = options.blacklist
     local whitelist = { "default" }
-
-    local function matches_blacklist(name)
-        local lower = name:lower()
-        -- Also match OP and ED capitalised
-        if name:find("OP") or name:find("ED") then
-            return true
-        end
-
-        for _, pat in ipairs(blacklist) do
-            if lower:find(pat) then
-                -- if options.debug then
-                --     print("Skipped " .. name .. " for matching " .. pat)
-                -- end
-                return true
-            end
-        end
-        return false
-    end
 
     local function matches_whitelist(name)
         local lower = name:lower()
@@ -145,6 +189,8 @@ local function get_default_font_and_styles()
         end
         return false
     end
+    
+    build_style_map()
 
     -- Avoid small-sized fonts, usually used for signs
     local scale = get_playres_scale()
@@ -155,60 +201,49 @@ local function get_default_font_and_styles()
     local orderKeys = {}
     local max_freq = 0
     local max_count = 0
-    if options.debug then
-        print("Fonts guessing from:")
-    end
-    for style_line in sub_data:gmatch("Style:([^\r\n]+)") do
-        local params = {}
-        for param in style_line:gmatch("([^,]+)") do
-            table.insert(params, param:match("^%s*(.-)%s*$"))
-        end
-        if #params >= 7 then -- Need at least style name, font name, size, and 4 colors
-            local style_name = params[1]
-            local size = tonumber(params[3]) or 999
-            if not matches_blacklist(style_name) and size > minimum_size then
-                local font_name = params[2]
-                local font_size = params[3]
-                local key = font_name .. "|" .. font_size
+    printDebug("Fonts guessing from:")
+    
+    for name, info in pairs(parsed_style_map) do
+         if not matches_blacklist(name) and info.size > minimum_size then
+            local key = info.font .. "|" .. info.size
 
-                if not freq[key] then
-                    freq[key] = 0
-                    table.insert(orderKeys, key)
-                end
-                freq[key] = freq[key] + 1
-
-                if freq[key] > max_freq then
-                    max_freq = freq[key]
-                    max_count = 1
-                elseif freq[key] == max_freq then
-                    max_count = max_count + 1
-                end
-
-                styleDetails[key] = styleDetails[key] or {}
-                local style_info = {
-                    name = style_name,
-                    font = font_name,
-                    size = font_size,
-                    primary_color = params[4],
-                    secondary_color = params[5],
-                    outline_color = params[6],
-                    back_color = params[7]
-                }
-                table.insert(styleDetails[key], style_info)
-
-                if options.debug then
-                    print(string.format("Style: %s - %s, %s, %s, %s, %s, %s",
-                        style_name, font_name, font_size,
-                        params[4], params[5], params[6], params[7]))
-                end
+            if not freq[key] then
+                freq[key] = 0
+                table.insert(orderKeys, key)
             end
+            freq[key] = freq[key] + 1
+
+            if freq[key] > max_freq then
+                max_freq = freq[key]
+                max_count = 1
+            elseif freq[key] == max_freq then
+                max_count = max_count + 1
+            end
+
+            styleDetails[key] = styleDetails[key] or {}
+            local style_info = {
+                name = name,
+                font = info.font,
+                size = info.size,
+                primary_color = info.primary_color,
+                secondary_color = info.secondary_color,
+                outline_color = info.outline_color,
+                back_color = info.back_color
+            }
+            table.insert(styleDetails[key], style_info)
+
+            printDebug(string.format("Style: %s - %s, %s, %s, %s, %s, %s",
+                    name, info.font, info.size,
+                    info.primary_color, info.secondary_color, info.outline_color, info.back_color))
         end
     end
+    
+    style_combinations = #orderKeys
 
-    if options.debug and next(freq) ~= nil then
-        print("Font+Size frequencies:")
+    if next(freq) ~= nil then
+        printDebug("Font+Size frequencies:")
         for key, count in pairs(freq) do
-            print("  " .. key .. ": " .. count)
+            printDebug("  " .. key .. ": " .. count)
         end
     end
 
@@ -228,9 +263,6 @@ local function get_default_font_and_styles()
                 for _, style_info in ipairs(styleDetails[key]) do
                     if matches_whitelist(style_info.name) then
                         chosenKey = key
-                        if options.debug then
-                            print("Chosen key was " .. key .. " because it matched the whitelist")
-                        end
                         break
                     end
                 end
@@ -240,9 +272,6 @@ local function get_default_font_and_styles()
     end
     if not chosenKey then
         chosenKey = firstTiedKey
-        if options.debug and chosenKey ~= nil then
-            print("Chosen key was " .. chosenKey .. " because it was the most common.")
-        end
     end
 
     -- For some reason, this runs faster than auto-selecting subtitles
@@ -252,12 +281,14 @@ local function get_default_font_and_styles()
     -- to update to the new track
     -- I've spent so much time debugging this.
     if not chosenKey then
-        print("No key was chosen!")
+        printDebug("No key was chosen!")
         return
     end
 
     default_styles = styleDetails[chosenKey]
     matching_styles = {}
+
+    -- TODO: If it uses the same font and the size is similar, consider it too? Need to test.
 
     for _, style_info in ipairs(default_styles) do
         table.insert(matching_styles, style_info.name)
@@ -272,17 +303,154 @@ local function get_default_font_and_styles()
         }
     end
 
-    if options.debug then
-        local style_list_str = (#matching_styles > 0 and table.concat(matching_styles, ", ")) or "none"
-        print(string.format("Final decision: replacing font '%s' (size %s) used by %d styles: %s",
-            default_styles[1] and default_styles[1].font or "nil",
-            default_styles[1] and default_styles[1].size or "nil",
-            #matching_styles,
-            style_list_str))
-    end
+    local style_list_str = (#matching_styles > 0 and table.concat(matching_styles, ", ")) or "none"
+    printDebug(string.format("Heuristic approach chose: replacing font '%s' (size %s) used by %d styles: %s",
+        default_styles[1] and default_styles[1].font or "nil",
+        default_styles[1] and default_styles[1].size or "nil",
+        #matching_styles,
+        style_list_str))
 end
 
-local function should_conserve()
+local function get_default_font_and_styles()
+    -- Heuristic guess of the "default" font, based on the most used style.
+    guess_font_from_metadata()
+
+    -- Apply the guessed styles immediately
+    apply_ass_style()
+
+    -- The heuristic approach can fail sometimes, so try to find the actual default font using ffmpeg
+    -- It is slower, hence we apply the heuristic first since it's basically instant.
+
+    -- Don't bother with only 1 style, thats the default.
+    if style_combinations == 1 then
+        return
+    end
+
+    local path = mp.get_property("path")
+    local track = mp.get_property_native("current-tracks/sub")
+    
+    if not path or not track or not track["ff-index"] then
+        return
+    end
+
+    local start_time = mp.get_time()
+    
+    local video_duration = mp.get_property_native("duration") or 0
+    local seek_time = 0
+    if video_duration > 0 then
+        -- Seek to a halfway point to avoid the opening and ending
+        seek_time = video_duration * 0.65
+    end
+
+    -- Take a sample of 2 minutes of the subtitle track to get the most used font+size combination
+    local args = {
+        "ffmpeg", 
+        "-loglevel", "quiet", 
+        "-ss", string.format("%.2f", seek_time),
+        "-i", path, 
+        "-t", "120",
+        "-map", "0:" .. track["ff-index"], 
+        "-f", "ass", 
+        "-"
+    }
+
+    -- Abort any pending FFmpeg process from a previous call
+    if abort_handle then
+        mp.abort_async_command(abort_handle)
+        abort_handle = nil
+    end
+
+    abort_handle = mp.command_native_async({
+        name = "subprocess",
+        args = args,
+        capture_stdout = true,
+        capture_stderr = true
+    }, function(success, res, err)
+        abort_handle = nil
+        if not success or not res or res.status ~= 0 then
+            return
+        end
+
+        if mp.get_property("path") ~= path then
+            return
+        end
+        
+        local content = res.stdout
+        if not content or content == "" then
+            return
+        end
+
+        local style_usage = {}
+
+        for line in content:gmatch("[^\r\n]+") do
+            if line:match("^Dialogue:") then
+                -- Format: Dialogue: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+                local style = line:match("Dialogue:%s*[^,]+,[^,]+,[^,]+,([^,]+)")
+                if style then
+                    style = style:match("^%s*(.-)%s*$")
+                    if not matches_blacklist(style) then
+                        style_usage[style] = (style_usage[style] or 0) + 1
+                    end
+                end
+            end
+        end
+
+        local font_size_usage = {}
+        local max_usage = 0
+        local most_used_key = nil
+
+        for style, count in pairs(style_usage) do
+            local info = parsed_style_map[style]
+            if info then
+                local key = info.font .. "|" .. info.size
+                font_size_usage[key] = (font_size_usage[key] or 0) + count
+                
+                if font_size_usage[key] > max_usage then
+                    max_usage = font_size_usage[key]
+                    most_used_key = key
+                end
+            end
+        end
+        
+        local end_time = mp.get_time()
+        local duration_taken = end_time - start_time
+        
+        if most_used_key then
+            local target_font, target_size_str = most_used_key:match("^(.-)|(.*)$")
+            local target_size = tonumber(target_size_str) or 0
+            
+            default_styles = {}
+            matching_styles = {}
+            
+            for name, info in pairs(parsed_style_map) do
+                if info.font == target_font and math.abs(info.size - target_size) <= 1 then
+                    local style_data = {
+                        name = name,
+                        font = info.font,
+                        size = info.size,
+                        primary_color = info.primary_color,
+                        secondary_color = info.secondary_color,
+                        outline_color = info.outline_color,
+                        back_color = info.back_color
+                    }
+                    table.insert(default_styles, style_data)
+                    table.insert(matching_styles, name)
+                    matching_styles[name] = style_data
+                end
+            end
+            
+            local style_list = table.concat(matching_styles, ", ")
+            printDebug(string.format("FFmpeg detected font: %s (Size: %s) used by [%s] (%.4fs)", target_font, target_size, style_list, duration_taken))
+            
+            -- Apply the new detected default style
+            apply_ass_style()
+        else 
+            printDebug(string.format("Could not detect font (%.4fs)", duration_taken))
+        end
+    end)
+end
+
+should_conserve = function()
     local unique_outline_colors = {}
     for _, style_info in ipairs(default_styles) do
         local outline_color = style_info.outline_color
@@ -306,7 +474,7 @@ local function should_conserve()
 end
 
 -- Prefix the style with the style names, so it only changes them.
-local function prefix_style(scaled_style)
+prefix_style = function(scaled_style)
     local all_parts = {}
     local conserve = should_conserve()
     -- How dark the outline needs to be to be replaced
@@ -392,7 +560,7 @@ local function prefix_style(scaled_style)
     return table.concat(all_parts, ",")
 end
 
-local function apply_ass_style()
+apply_ass_style = function()
     local style = styles.ass[options.ass_index]
     if not style then return end
 
@@ -563,13 +731,11 @@ mp.observe_property("current-tracks/sub", "native", function(name, value)
 
     ass_subtitle = nil
     cached_scale = nil
+    parsed_style_map = nil
     if is_ass_subtitle() then
-        if options.debug then
-            print("Detected change in subtitle tracks!")
-        end
+        printDebug("Detected change in subtitle tracks!")
         sub_data = mp.get_property("sub-ass-extradata") or ""
         get_default_font_and_styles()
-        apply_ass_style()
     else
         apply_non_ass_style()
     end

@@ -46,6 +46,4 @@ The disadvantage of simply using an override, is that it won't work on all files
 To fix this, we can simply get the PlayRes it uses, and divide it by the default PlayRes values. This gives us a scale factor that we can use
 to multiply the overrides values.
 
-To try to guess the default font, it gets all the styles from the property `sub-ass-extradata`, and after discarding some blacklisted names, it gets the most popular
-font + size combination, which is usually the main font (and if it isn't, then either open a bug report with info about the fonts in the file, or try to fix it yourself by adding
-a blacklist)
+For guessing the default font, first it uses a heuristic approach, trying to guess it by the most popular font + size combination, then it uses `ffmpeg` to analyse 2 minutes of the anime.
