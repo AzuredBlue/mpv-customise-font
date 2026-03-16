@@ -98,6 +98,16 @@ local function get_config_path()
     return script_opts_dir
 end
 
+local function set_property_if_diff(name, value)
+    if type(value) == "boolean" then
+        value = value and "yes" or "no"
+    end
+    local current_value = mp.get_property(name)
+    if current_value ~= tostring(value) then
+        mp.set_property(name, tostring(value))
+    end
+end
+
 local function printDebug(...)
     if options.debug then
         print(...)
@@ -342,6 +352,9 @@ local function get_default_font_and_styles()
         seek_time = video_duration * 0.65
     end
 
+    local scale = get_playres_scale()
+    local minimum_size = math.floor(18 * scale + 0.5)
+
     -- Take a sample of 2 minutes of the subtitle track to get the most used font+size combination
     local args = {
         "ffmpeg", 
@@ -388,7 +401,7 @@ local function get_default_font_and_styles()
                 local style = line:match("Dialogue:%s*[^,]+,[^,]+,[^,]+,([^,]+)")
                 if style then
                     style = style:match("^%s*(.-)%s*$")
-                    if not matches_blacklist(style) then
+                    if not matches_blacklist(style) and parsed_style_map[style].size > minimum_size then
                         style_usage[style] = (style_usage[style] or 0) + 1
                     end
                 end
@@ -545,10 +558,10 @@ prefix_style = function(scaled_style)
                     end
 
                     if modify then
-                        table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+                        table.insert(parts, style_name .. "." .. key .. "=" .. value)
                     end
                 else
-                    table.insert(parts, string.format("%s.%s=%s", style_name, key, value))
+                    table.insert(parts, style_name .. "." .. key .. "=" .. value)
                 end
             else
                 table.insert(parts, param)
@@ -566,7 +579,7 @@ apply_ass_style = function()
 
     -- If its the "Default" style, use the user's mpv.conf style
     if style == "" and existing_sub_style ~= nil then
-        mp.set_property("sub-ass-style-overrides", existing_sub_style)
+        set_property_if_diff("sub-ass-style-overrides", existing_sub_style)
         return
     end
 
@@ -590,7 +603,7 @@ apply_ass_style = function()
             if size then
                 size = math.floor((options.alternate_font_scale * tonumber(size)) + 0.5)
                 scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
-                scaled_style = scaled_style .. string.format(",FontSize=%d", size)
+                scaled_style = scaled_style .. ",FontSize=" .. tostring(size)
             end
         end
     else
@@ -602,7 +615,7 @@ apply_ass_style = function()
             -- Remove any existing FontSize=... to avoid duplication when appending the computed value
             scaled_style = scaled_style:gsub(",?FontSize=[%d%.]+", "")
             local size = math.floor(base_size * scale + 0.5)
-            scaled_style = scaled_style .. string.format(",FontSize=%d", size)
+            scaled_style = scaled_style .. ",FontSize=" .. tostring(size)
         end
     end
 
@@ -625,9 +638,9 @@ apply_ass_style = function()
         scaled_style = scaled_style .. ",LayoutResX=0,LayoutResY=0"
     end
 
-    mp.set_property("sub-ass-style-overrides", scaled_style)
+    set_property_if_diff("sub-ass-style-overrides", scaled_style)
 
-    if options.set_sub_pos then mp.set_property("sub-pos", 98) end
+    if options.set_sub_pos then set_property_if_diff("sub-pos", 98) end
 end
 
 local function apply_non_ass_style()
@@ -639,16 +652,16 @@ local function apply_non_ass_style()
         font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
     end
 
-    mp.set_property_native("sub-font-size", font_size)
+    set_property_if_diff("sub-font-size", font_size)
 
     for key, value in pairs(style) do
         if key ~= "name" then
             local mpv_property_name = "sub-" .. string.gsub(key, "_", "-")
-            mp.set_property_native(mpv_property_name, value)
+            set_property_if_diff(mpv_property_name, value)
         end
     end
 
-    if options.set_sub_pos then mp.set_property("sub-pos", 98) end
+    if options.set_sub_pos then set_property_if_diff("sub-pos", 98) end
 end
 
 local function save_config()
