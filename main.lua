@@ -314,7 +314,7 @@ local function guess_font_from_metadata()
     end
 
     local style_list_str = (#matching_styles > 0 and table.concat(matching_styles, ", ")) or "none"
-    printDebug(string.format("Heuristic approach chose: replacing font '%s' (size %s) used by %d styles: %s",
+    print(string.format("Heuristic approach chose: replacing font '%s' (size %s) used by %d styles: %s",
         default_styles[1] and default_styles[1].font or "nil",
         default_styles[1] and default_styles[1].size or "nil",
         #matching_styles,
@@ -398,10 +398,17 @@ local function get_default_font_and_styles()
         for line in content:gmatch("[^\r\n]+") do
             if line:match("^Dialogue:") then
                 -- Format: Dialogue: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-                local style = line:match("Dialogue:%s*[^,]+,[^,]+,[^,]+,([^,]+)")
-                if style then
+                local style, text = line:match("^Dialogue:%s*[^,]+,[^,]+,[^,]+,([^,]+),[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,(.*)$")
+                text = text or ""
+
+                -- Ignore lines with inline ASS override blocks (e.g. {\pos}, {\move}, {\fn...})
+                -- so sign/positioning heavy lines don't skew default style detection.
+                local has_inline_ass_tags = text:match("{[^}]*}") ~= nil
+
+                if style and not has_inline_ass_tags then
                     style = style:match("^%s*(.-)%s*$")
-                    if not matches_blacklist(style) and parsed_style_map[style].size > minimum_size then
+                    local info = parsed_style_map[style]
+                    if info and not matches_blacklist(style) and info.size > minimum_size then
                         style_usage[style] = (style_usage[style] or 0) + 1
                     end
                 end
@@ -453,7 +460,7 @@ local function get_default_font_and_styles()
             end
             
             local style_list = table.concat(matching_styles, ", ")
-            printDebug(string.format("FFmpeg detected font: %s (Size: %s) used by [%s] (%.4fs)", target_font, target_size, style_list, duration_taken))
+            print(string.format("FFmpeg detected font: %s (Size: %s) used by [%s] (%.4fs)", target_font, target_size, style_list, duration_taken))
             
             -- Apply the new detected default style
             apply_ass_style()
