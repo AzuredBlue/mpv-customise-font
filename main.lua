@@ -355,13 +355,13 @@ local function get_default_font_and_styles()
     local scale = get_playres_scale()
     local minimum_size = math.floor(18 * scale + 0.5)
 
-    -- Take a sample of 2 minutes of the subtitle track to get the most used font+size combination
+    -- Take a sample of the subtitle track to get the most used font+size combination
     local args = {
         "ffmpeg", 
         "-loglevel", "quiet", 
         "-ss", string.format("%.2f", seek_time),
         "-i", path, 
-        "-t", "120",
+        "-t", "45",
         "-map", "0:" .. track["ff-index"], 
         "-f", "ass", 
         "-"
@@ -395,24 +395,16 @@ local function get_default_font_and_styles()
 
         local style_usage = {}
 
-        for line in content:gmatch("[^\r\n]+") do
-            if line:match("^Dialogue:") then
-                -- Format: Dialogue: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-                local style, text = line:match("^Dialogue:%s*[^,]+,[^,]+,[^,]+,([^,]+),[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,(.*)$")
-                text = text or ""
-
-                -- Ignore lines with inline ASS override blocks (e.g. {\pos}, {\move}, {\fn...})
-                -- so sign/positioning heavy lines don't skew default style detection.
-                local has_inline_ass_tags = text:match("{[^}]*}") ~= nil
-
-                if style and not has_inline_ass_tags then
+        for style, text in content:gmatch("Dialogue:%s*[^,]*,[^,]*,[^,]*,([^,]+),[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,([^\r\n]*)") do
+                -- Ignore lines with complex inline ASS override tags
+                local is_sign = text:match("\\[%a]+%(") or text:match("\\p[1-9]") or text:match("\\f[snra]")
+                if not is_sign then
                     style = style:match("^%s*(.-)%s*$")
                     local info = parsed_style_map[style]
                     if info and not matches_blacklist(style) and info.size > minimum_size then
                         style_usage[style] = (style_usage[style] or 0) + 1
                     end
                 end
-            end
         end
 
         local font_size_usage = {}
@@ -471,26 +463,53 @@ local function get_default_font_and_styles()
 end
 
 should_conserve = function()
-    local unique_outline_colors = {}
+    local first_color = nil
     for _, style_info in ipairs(default_styles) do
         local outline_color = style_info.outline_color
-
         if outline_color then
-            if not unique_outline_colors[outline_color] then
-                unique_outline_colors[outline_color] = true
+            if not first_color then
+                first_color = outline_color
+            elseif first_color ~= outline_color then
+                return true
             end
         end
     end
-
-    local count = 0
-    for _ in pairs(unique_outline_colors) do count = count + 1 end
 
     -- If theres only one outline color, give priority to the one in ass overrides
     -- If theres multiple, conserve, since:
     -- If it contains black, its probably the default font, and the other colors are the ALTs
     -- If it doesnt, trying to guess what to replace and not is a pain, so just conserve.
 
-    return count > 1
+    return false
+end
+
+local function hex_to_rgb(h)
+    h = h:gsub("^#", "")
+    if #h == 3 then
+        h = h:sub(1, 1) .. h:sub(1, 1) .. h:sub(2, 2) .. h:sub(2, 2) .. h:sub(3, 3) .. h:sub(3, 3)
+    end
+    h = h:sub(-6)
+    local r = tonumber(h:sub(1, 2), 16) or 0
+    local g = tonumber(h:sub(3, 4), 16) or 0
+    local b = tonumber(h:sub(5, 6), 16) or 0
+    return r, g, b
+end
+
+local function srgb_to_linear(c)
+    c = c / 255.0
+    if c <= 0.03928 then
+        return c / 12.92
+    else
+        return ((c + 0.055) / 1.055) ^ 2.4
+    end
+end
+
+local function luminance_from_hex(h)
+    local r, g, b = hex_to_rgb(h)
+    local rl = srgb_to_linear(r)
+    local gl = srgb_to_linear(g)
+    local bl = srgb_to_linear(b)
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
 end
 
 -- Prefix the style with the style names, so it only changes them.
@@ -499,35 +518,6 @@ prefix_style = function(scaled_style)
     local conserve = should_conserve()
     -- How dark the outline needs to be to be replaced
     local DARKNESS_THRESHOLD = 0.03
-
-    local function hex_to_rgb(h)
-        h = h:gsub("^#", "")
-        if #h == 3 then
-            h = h:sub(1, 1) .. h:sub(1, 1) .. h:sub(2, 2) .. h:sub(2, 2) .. h:sub(3, 3) .. h:sub(3, 3)
-        end
-        h = h:sub(-6)
-        local r = tonumber(h:sub(1, 2), 16) or 0
-        local g = tonumber(h:sub(3, 4), 16) or 0
-        local b = tonumber(h:sub(5, 6), 16) or 0
-        return r, g, b
-    end
-
-    local function srgb_to_linear(c)
-        c = c / 255.0
-        if c <= 0.03928 then
-            return c / 12.92
-        else
-            return ((c + 0.055) / 1.055) ^ 2.4
-        end
-    end
-
-    local function luminance_from_hex(h)
-        local r, g, b = hex_to_rgb(h)
-        local rl = srgb_to_linear(r)
-        local gl = srgb_to_linear(g)
-        local bl = srgb_to_linear(b)
-        return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
-    end
 
     -- if conserve and options.conserve_style_color and options.debug then
     --     print("More than 1 color detected in the font! Conserving colors.")
@@ -654,7 +644,7 @@ local function apply_non_ass_style()
     local style = styles.non_ass[options.non_ass_index]
     if not style then return end
 
-    font_size = options.default_font_size
+    local font_size = options.default_font_size
     if options.alternate_size then
         font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
     end
