@@ -45,16 +45,17 @@ for _, style in ipairs(styles) do
             local new_style = {
                 name = params.FontName,
                 font = params.FontName,
-                bold = (params.Bold == "1"),
+                bold = (params.Bold == "1" or params.Bold == "-1"),
                 border_color = vb_to_argb(params.OutlineColour),
                 shadow_color = vb_to_argb(params.BackColour),
-                border_size = params.Outline and (tonumber(params.Outline) * 2) or nil,
-                shadow_offset = params.Shadow and (tonumber(params.Shadow) * 2) or nil,
-                font_size = params.FontSize and (tonumber(params.FontSize) * 2) or nil,
+                border_size = params.Outline and (tonumber(params.Outline) * 2) or 0,
+                shadow_offset = params.Shadow and (tonumber(params.Shadow) * 2) or 0,
+                blur = params.Blur and tonumber(params.Blur) or 0,
+                font_size = params.FontSize and (tonumber(params.FontSize) * 2) or 48,
             }
-            
+
             if params.PrimaryColour and params.PrimaryColour ~= "&H00FFFFFF" then
-               new_style.color = vb_to_argb(params.PrimaryColour)
+                new_style.color = vb_to_argb(params.PrimaryColour)
             end
 
             table.insert(non_ass, new_style)
