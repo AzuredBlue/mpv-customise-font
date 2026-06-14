@@ -10,20 +10,20 @@ Git clone the repository inside your scripts folder.
 
 ## Usage
 
-After installing, modify `styles.lua`:
+To add your own fonts and custom styles without them being overwritten when updating the script, create a file named `custom-styles.lua` in the script's directory and add your font styles there.
+
+Example `custom-styles.lua`:
 
 ```lua
-        styles = {
-            "FontName=Trebuchet MS,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=2,Shadow=1",
-            "FontName=LTFinnegan Medium,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Outline=1,Shadow=0.23,MarginV=20",
-            "FontName=Gandhi Sans,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00211211,BackColour=&H7F000000,Outline=1.1,Shadow=0.5",
-            ""
-        }
+return {
+    "FontName=Netflix Sans,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,Bold=-1,Outline=1.3,Shadow=0,Blur=7",
+    "FontName=Gandhi Sans,Bold=1,Outline=1.2,Shadow=0.6666,ShadowX=2,ShadowY=2",
+    "FontName=Trebuchet MS,Bold=1,Outline=1.8,Shadow=1,ShadowX=2,ShadowY=2",
+    ""
+}
 ```
 
-These are just examples. Change them to your favourite fonts overrides. Colours use the Visual Basic Hex format `&HAABBGGRR`. 
-
-Pressing `k` will cycle forwards, `K` will cycle backwards, and `Ctrl+k` will cycle between Normal and Smaller font.
+After doing that, simply press `k` to cycle forwards, `K` to cycle backwards, and `Ctrl+k` to cycle between Normal and Smaller font. You can also press `Ctrl+r` to reload the config and apply any modifications you made to `custom-styles.lua` on-the-fly.
 You can change these controls in the script:
 
 ```lua

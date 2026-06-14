@@ -10,6 +10,13 @@ local styles = {
     ""
 }
 
+local has_custom, custom_styles = pcall(require, "custom-styles")
+if has_custom and type(custom_styles) == "table" then
+    styles = custom_styles
+    if styles[#styles] ~= "" then
+        table.insert(styles, "")
+    end
+end
 
 -- Transform from Visual Basic Hex to RGB
 local function vb_to_argb(c)

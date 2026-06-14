@@ -759,6 +759,7 @@ end)
 
 local function reload()
     package.loaded["styles"] = nil
+    package.loaded["custom-styles"] = nil
     styles = require("styles")
     cycle_styles(0)
 end
