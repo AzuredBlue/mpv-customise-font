@@ -51,7 +51,8 @@ for _, style in ipairs(styles) do
                 border_size = params.Outline and (tonumber(params.Outline) * 2) or 0,
                 shadow_offset = params.Shadow and (tonumber(params.Shadow) * 2) or 0,
                 blur = params.Blur and tonumber(params.Blur) or 0,
-                font_size = params.FontSize and (tonumber(params.FontSize) * 2) or 48,
+                -- nil falls back to default_font_size
+                font_size = params.FontSize and (tonumber(params.FontSize) * 2) or nil,
             }
 
             if params.PrimaryColour and params.PrimaryColour ~= "&H00FFFFFF" then

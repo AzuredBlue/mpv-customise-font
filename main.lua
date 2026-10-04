@@ -18,6 +18,8 @@ local sub_data = nil
 local style_combinations = 0
 
 local abort_handle = nil
+-- Incremented on every subtitle track change, so stale FFmpeg results are discarded
+local track_generation = 0
 
 -- Forward declarations
 local parsed_style_map = nil
@@ -321,12 +323,24 @@ local function guess_font_from_metadata()
         style_list_str))
 end
 
+local function abort_ffmpeg()
+    if abort_handle then
+        mp.abort_async_command(abort_handle)
+        abort_handle = nil
+    end
+end
+
 local function get_default_font_and_styles()
     -- Heuristic guess of the "default" font, based on the most used style.
     guess_font_from_metadata()
 
     -- Apply the guessed styles immediately
     apply_ass_style()
+
+    -- Every style is modified, no need to find the default one
+    if not options.only_modify_default_font then
+        return
+    end
 
     -- The heuristic approach can fail sometimes, so try to find the actual default font using ffmpeg
     -- It is slower, hence we apply the heuristic first since it's basically instant.
@@ -368,26 +382,30 @@ local function get_default_font_and_styles()
     }
 
     -- Abort any pending FFmpeg process from a previous call
-    if abort_handle then
-        mp.abort_async_command(abort_handle)
-        abort_handle = nil
-    end
+    abort_ffmpeg()
 
-    abort_handle = mp.command_native_async({
+    local generation = track_generation
+    local handle
+    handle = mp.command_native_async({
         name = "subprocess",
         args = args,
         capture_stdout = true,
         capture_stderr = true
     }, function(success, res, err)
-        abort_handle = nil
+        -- An aborted process can finish after a new one started, don't clear the new handle
+        if abort_handle == handle then
+            abort_handle = nil
+        end
+
         if not success or not res or res.status ~= 0 then
             return
         end
 
-        if mp.get_property("path") ~= path then
+        -- The subtitle track changed while FFmpeg was running
+        if generation ~= track_generation or mp.get_property("path") ~= path or not parsed_style_map then
             return
         end
-        
+
         local content = res.stdout
         if not content or content == "" then
             return
@@ -460,6 +478,7 @@ local function get_default_font_and_styles()
             printDebug(string.format("Could not detect font (%.4fs)", duration_taken))
         end
     end)
+    abort_handle = handle
 end
 
 should_conserve = function()
@@ -644,15 +663,16 @@ local function apply_non_ass_style()
     local style = styles.non_ass[options.non_ass_index]
     if not style then return end
 
-    local font_size = options.default_font_size
+    -- Use the style's FontSize if it has one, otherwise the default
+    local font_size = style.font_size or options.default_font_size
     if options.alternate_size then
-        font_size = math.floor(options.alternate_font_scale * options.default_font_size + 0.5)
+        font_size = math.floor(options.alternate_font_scale * font_size + 0.5)
     end
 
     set_property_if_diff("sub-font-size", font_size)
 
     for key, value in pairs(style) do
-        if key ~= "name" then
+        if key ~= "name" and key ~= "font_size" then
             local mpv_property_name = "sub-" .. string.gsub(key, "_", "-")
             set_property_if_diff(mpv_property_name, value)
         end
@@ -738,6 +758,9 @@ mp.observe_property("current-tracks/sub", "native", function(name, value)
     if existing_sub_style == nil then
         existing_sub_style = mp.get_property("sub-ass-style-overrides");
     end
+
+    track_generation = track_generation + 1
+    abort_ffmpeg()
 
     ass_subtitle = nil
     cached_scale = nil
